@@ -365,7 +365,7 @@ impl<'a, 'tcx> ExprUseVisitor<'a, 'tcx> {
                 self.consume_expr(value);
             }
 
-            hir::ExprKind::CilkSpawn(block) => self.walk_block(block),
+            hir::ExprKind::CilkSpawn(block) => self.consume_expr(block),
         }
     }
 

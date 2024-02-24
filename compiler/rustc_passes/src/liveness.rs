@@ -1042,7 +1042,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
             }
 
             // FIXME(jhilton): again, it's possible that we have to do something more sophisiticated for cilk_spawn/sync liveness.
-            hir::ExprKind::CilkSpawn(block) => self.propagate_through_block(block, succ),
+            hir::ExprKind::CilkSpawn(expr) => self.propagate_through_expr(expr, succ),
 
             hir::ExprKind::AddrOf(_, _, ref e)
             | hir::ExprKind::Cast(ref e, _)

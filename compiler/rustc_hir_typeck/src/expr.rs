@@ -360,7 +360,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.check_expr_index(base, idx, expr, brackets_span)
             }
             ExprKind::Yield(value, _) => self.check_expr_yield(value, expr),
-            ExprKind::CilkSpawn(block) => self.check_block_with_expected(block, expected),
+            ExprKind::CilkSpawn(expr) => self.check_expr(expr),
             ExprKind::CilkSync => Ty::new_unit(tcx),
             hir::ExprKind::Err(guar) => Ty::new_error(tcx, guar),
         }
