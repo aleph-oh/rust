@@ -814,6 +814,15 @@ impl<'a> State<'a> {
                     );
                 }
             }
+            ast::ExprKind::CilkSpawn(body) => {
+                self.cbox(0);
+                self.ibox(0);
+                self.word_nbsp("cilk_spawn");
+                self.print_block_with_attrs(body, attrs);
+            }
+            ast::ExprKind::CilkSync => {
+                self.word("cilk_sync");
+            }
             ast::ExprKind::Become(result) => {
                 self.word("become");
                 self.word(" ");

@@ -1,0 +1,8 @@
+error: expected expression, found reserved keyword `cilk_sync`
+  --> $DIR/fib_block_recurse.rs:7:5
+   |
+LL |     cilk_sync;
+   |     ^^^^^^^^^ expected expression
+
+error: aborting due to 1 previous error
+

@@ -1521,7 +1521,9 @@ pub fn noop_visit_expr<T: MutVisitor>(
         }
         ExprKind::Try(expr) => vis.visit_expr(expr),
         ExprKind::TryBlock(body) => vis.visit_block(body),
-        ExprKind::Lit(_) | ExprKind::IncludedBytes(..) | ExprKind::Err => {}
+        ExprKind::CilkSpawn(body) => vis.visit_block(body),
+        // TODO(jhilton): make sure this makes sense after you implement AST lowering.
+        ExprKind::Lit(_) | ExprKind::IncludedBytes(..) | ExprKind::CilkSync | ExprKind::Err => {}
     }
     vis.visit_id(id);
     vis.visit_span(span);

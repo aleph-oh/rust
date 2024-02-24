@@ -31,6 +31,9 @@ symbols! {
         DollarCrate:        "$crate",
         Underscore:         "_",
 
+        // TODO(jhilton): do spawn and sync make sense as unstable keywords? At some point they should
+        //  probably become stable keywords.
+
         // Keywords that are used in stable Rust.
         As:                 "as",
         Break:              "break",
@@ -72,6 +75,8 @@ symbols! {
         Abstract:           "abstract",
         Become:             "become",
         Box:                "box",
+        CilkSpawn:          "cilk_spawn",
+        CilkSync:           "cilk_sync",
         Do:                 "do",
         Final:              "final",
         Macro:              "macro",

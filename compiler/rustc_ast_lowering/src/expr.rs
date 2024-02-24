@@ -288,6 +288,12 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     let sub_expr = self.lower_expr(sub_expr);
                     hir::ExprKind::Become(sub_expr)
                 }
+                // TODO(jhilton): we'll add lowering for cilk_spawn and cilk_sync once I'm happy with how it's been added to the
+                //  highest-level IR.
+                ExprKind::CilkSpawn(_body) => todo!(),
+                ExprKind::CilkSync => {
+                    todo!()
+                }
                 ExprKind::InlineAsm(asm) => {
                     hir::ExprKind::InlineAsm(self.lower_inline_asm(e.span, asm))
                 }
