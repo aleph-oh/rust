@@ -193,6 +193,8 @@ pub fn ident_can_begin_expr(name: Symbol, span: Span, is_raw: bool) -> bool {
             kw::Do,
             kw::Box,
             kw::Break,
+            kw::CilkSpawn, // This is an expression for the same reason that blocks are expressions.
+            kw::CilkSync,  // This is an expression for essentially the same reason continue is.
             kw::Const,
             kw::Continue,
             kw::False,

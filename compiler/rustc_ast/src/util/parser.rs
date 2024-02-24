@@ -246,6 +246,8 @@ pub enum ExprPrecedence {
     Yield,
     Yeet,
     Become,
+    // TODO(jhilton): make sure the precedence is well-chosen? I don't think it really matters here since there's no nesting of cilk_syncs.
+    CilkSync,
 
     Range,
 
@@ -281,6 +283,7 @@ pub enum ExprPrecedence {
     ForLoop,
     Loop,
     Match,
+    CilkSpawn,
     ConstBlock,
     Block,
     TryBlock,
@@ -300,7 +303,8 @@ impl ExprPrecedence {
             | ExprPrecedence::Ret
             | ExprPrecedence::Yield
             | ExprPrecedence::Yeet
-            | ExprPrecedence::Become => PREC_JUMP,
+            | ExprPrecedence::Become
+            | ExprPrecedence::CilkSync => PREC_JUMP,
 
             // `Range` claims to have higher precedence than `Assign`, but `x .. x = x` fails to
             // parse, instead of parsing as `(x .. x) = x`. Giving `Range` a lower precedence
@@ -348,6 +352,7 @@ impl ExprPrecedence {
             | ExprPrecedence::ForLoop
             | ExprPrecedence::Loop
             | ExprPrecedence::Match
+            | ExprPrecedence::CilkSpawn
             | ExprPrecedence::ConstBlock
             | ExprPrecedence::Block
             | ExprPrecedence::TryBlock

@@ -320,6 +320,10 @@ impl<'cx, 'a> Context<'cx, 'a> {
             | ExprKind::While(_, _, _)
             | ExprKind::Yeet(_)
             | ExprKind::Become(_)
+            // We don't bother supporting nice asserts for cilk_spawn because we don't add an implicit sync or anything.
+            | ExprKind::CilkSpawn(_)
+            // We don't bother supporting nice asserts for cilk_sync because it always evaluates to unit.
+            | ExprKind::CilkSync
             | ExprKind::Yield(_) => {}
         }
     }

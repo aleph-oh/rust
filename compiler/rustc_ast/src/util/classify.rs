@@ -57,6 +57,7 @@ pub fn expr_trailing_brace(mut expr: &ast::Expr) -> Option<&ast::Expr> {
             | Struct(..)
             | TryBlock(..)
             | While(..)
+            | CilkSpawn(..)
             | ConstBlock(_) => break Some(expr),
 
             MacCall(mac) => {
@@ -89,6 +90,7 @@ pub fn expr_trailing_brace(mut expr: &ast::Expr) -> Option<&ast::Expr> {
             | Paren(_)
             | Try(_)
             | Yeet(None)
+            | CilkSync
             | Err => break None,
         }
     }

@@ -1296,6 +1296,8 @@ impl Expr {
             ExprKind::Yeet(..) => ExprPrecedence::Yeet,
             ExprKind::FormatArgs(..) => ExprPrecedence::FormatArgs,
             ExprKind::Become(..) => ExprPrecedence::Become,
+            ExprKind::CilkSpawn(..) => ExprPrecedence::CilkSpawn,
+            ExprKind::CilkSync => ExprPrecedence::CilkSync,
             ExprKind::Err => ExprPrecedence::Err,
         }
     }
@@ -1451,6 +1453,10 @@ pub enum ExprKind {
     /// A try block (`try { ... }`).
     TryBlock(P<Block>),
 
+    /// A cilk_spawn block (`cilk_spawn { ... }`).
+    // TODO(jhilton): we might be able to generalize this by making this accept a P<Expr> instead.
+    CilkSpawn(P<Block>),
+
     /// An assignment (`a = foo()`).
     /// The `Span` argument is the span of the `=` token.
     Assign(P<Expr>, P<Expr>, Span),
@@ -1529,6 +1535,9 @@ pub enum ExprKind {
 
     /// A `format_args!()` expression.
     FormatArgs(P<FormatArgs>),
+
+    /// A cilk_sync expression. Always evaluates to ().
+    CilkSync,
 
     /// Placeholder for an expression that wasn't syntactically well formed in some way.
     Err,
