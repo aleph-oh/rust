@@ -1597,6 +1597,8 @@ impl Expr<'_> {
             ExprKind::Struct(..) => ExprPrecedence::Struct,
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
+            ExprKind::CilkSpawn(..) => ExprPrecedence::CilkSpawn,
+            ExprKind::CilkSync => ExprPrecedence::CilkSync,
             ExprKind::Err(_) => ExprPrecedence::Err,
         }
     }
@@ -1664,6 +1666,8 @@ impl Expr<'_> {
             | ExprKind::Yield(..)
             | ExprKind::Cast(..)
             | ExprKind::DropTemps(..)
+            | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkSync
             | ExprKind::Err(_) => false,
         }
     }
@@ -1748,6 +1752,8 @@ impl Expr<'_> {
             | ExprKind::Binary(..)
             | ExprKind::Yield(..)
             | ExprKind::DropTemps(..)
+            | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkSync
             | ExprKind::Err(_) => true,
         }
     }
@@ -1923,6 +1929,13 @@ pub enum ExprKind<'hir> {
 
     /// A suspension point for coroutines (i.e., `yield <expr>`).
     Yield(&'hir Expr<'hir>, YieldSource),
+
+    /// An expression that makes the right-hand side potentially parallel with the continuation.
+    // TODO(jhilton): should this be an Expr instead?
+    CilkSpawn(&'hir Block<'hir>),
+
+    /// A suspension point for spawned tasks.
+    CilkSync,
 
     /// A placeholder for an expression that wasn't syntactically well formed in some way.
     Err(rustc_span::ErrorGuaranteed),

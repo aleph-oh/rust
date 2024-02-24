@@ -805,7 +805,10 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr<'v>) 
         ExprKind::Yield(ref subexpression, _) => {
             visitor.visit_expr(subexpression);
         }
-        ExprKind::Lit(_) | ExprKind::Err(_) => {}
+        ExprKind::CilkSpawn(block) => {
+            visitor.visit_block(block);
+        }
+        ExprKind::CilkSync | ExprKind::Lit(_) | ExprKind::Err(_) => {}
     }
 }
 
