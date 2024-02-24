@@ -409,7 +409,10 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             hir::ExprKind::If(..)
             | hir::ExprKind::Match(..)
             | hir::ExprKind::Loop(..)
-            | hir::ExprKind::Yield(..) => {
+            | hir::ExprKind::Yield(..)
+            // FIXME(jhilton): for now, we add cilk_spawn to the liveness analysis. Handling cilk_spawn might be a little more
+            //  subtle though.
+            | hir::ExprKind::CilkSpawn(..) => {
                 self.add_live_node_for_node(expr.hir_id, ExprNode(expr.span, expr.hir_id));
             }
             hir::ExprKind::Binary(op, ..) if op.node.is_lazy() => {
@@ -442,6 +445,7 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::InlineAsm(..)
             | hir::ExprKind::OffsetOf(..)
             | hir::ExprKind::Type(..)
+            | hir::ExprKind::CilkSync
             | hir::ExprKind::Err(_)
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
             | hir::ExprKind::Path(hir::QPath::LangItem(..)) => {}
@@ -1037,6 +1041,9 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 self.propagate_through_expr(l, r_succ)
             }
 
+            // FIXME(jhilton): again, it's possible that we have to do something more sophisiticated for cilk_spawn/sync liveness.
+            hir::ExprKind::CilkSpawn(block) => self.propagate_through_block(block, succ),
+
             hir::ExprKind::AddrOf(_, _, ref e)
             | hir::ExprKind::Cast(ref e, _)
             | hir::ExprKind::Type(ref e, _)
@@ -1108,6 +1115,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
             | hir::ExprKind::Err(_)
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
             | hir::ExprKind::Path(hir::QPath::LangItem(..))
+            | hir::ExprKind::CilkSync
             | hir::ExprKind::OffsetOf(..) => succ,
 
             // Note that labels have been resolved, so we don't need to look
@@ -1398,6 +1406,10 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
         | hir::ExprKind::Path(_)
         | hir::ExprKind::Yield(..)
         | hir::ExprKind::Type(..)
+        // FIXME(jhilton): again, not sure if there are liveness-related correctness conditions for spawn.
+        //  I doubt it based on the handling of loops and method calls.
+        | hir::ExprKind::CilkSpawn(..)
+        | hir::ExprKind::CilkSync
         | hir::ExprKind::Err(_) => {}
     }
 }

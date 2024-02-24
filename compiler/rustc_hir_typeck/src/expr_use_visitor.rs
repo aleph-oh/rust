@@ -301,6 +301,7 @@ impl<'a, 'tcx> ExprUseVisitor<'a, 'tcx> {
             | hir::ExprKind::Lit(..)
             | hir::ExprKind::ConstBlock(..)
             | hir::ExprKind::OffsetOf(..)
+            | hir::ExprKind::CilkSync
             | hir::ExprKind::Err(_) => {}
 
             hir::ExprKind::Loop(blk, ..) => {
@@ -363,6 +364,8 @@ impl<'a, 'tcx> ExprUseVisitor<'a, 'tcx> {
             hir::ExprKind::Yield(value, _) => {
                 self.consume_expr(value);
             }
+
+            hir::ExprKind::CilkSpawn(block) => self.walk_block(block),
         }
     }
 

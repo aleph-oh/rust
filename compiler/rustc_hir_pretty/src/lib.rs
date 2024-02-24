@@ -1529,6 +1529,13 @@ impl<'a> State<'a> {
                 self.word_space("yield");
                 self.print_expr_maybe_paren(expr, parser::PREC_JUMP);
             }
+            hir::ExprKind::CilkSpawn(block) => {
+                self.word_space("cilk_spawn");
+                self.print_block(block);
+            }
+            hir::ExprKind::CilkSync => {
+                self.word("cilk_sync");
+            }
             hir::ExprKind::Err(_) => {
                 self.popen();
                 self.word("/*ERROR*/");
