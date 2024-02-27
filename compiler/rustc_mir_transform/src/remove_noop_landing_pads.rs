@@ -76,7 +76,14 @@ impl RemoveNoopLandingPads {
             | TerminatorKind::Call { .. }
             | TerminatorKind::Assert { .. }
             | TerminatorKind::Drop { .. }
-            | TerminatorKind::InlineAsm { .. } => false,
+            | TerminatorKind::InlineAsm { .. }
+            // NOTE(jhilton): We mark these as not nop landing pads because bad codegen is better than incorrect code.
+            // I'm also fairly sure that these aren't nop landing pads because landing pads shouldn't
+            // include Cilk instructions. This means it would probably also be safe to move these cases
+            // up to the top case where we see if nop_landing_pads contains any successor of these.
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Sync { .. } => false,
         }
     }
 

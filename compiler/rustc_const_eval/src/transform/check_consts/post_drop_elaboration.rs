@@ -117,7 +117,11 @@ impl<'tcx> Visitor<'tcx> for CheckLiveDrops<'_, 'tcx> {
             | mir::TerminatorKind::Return
             | mir::TerminatorKind::SwitchInt { .. }
             | mir::TerminatorKind::Unreachable
-            | mir::TerminatorKind::Yield { .. } => {}
+            | mir::TerminatorKind::Yield { .. }
+            // Detach and Reattach shouldn't be doing any of their own drop handling after drop elaboration.
+            | mir::TerminatorKind::Detach { .. }
+            | mir::TerminatorKind::Reattach { .. }
+            | mir::TerminatorKind::Sync { .. } => {}
         }
     }
 }

@@ -645,7 +645,13 @@ impl<'tcx> Stable<'tcx> for mir::TerminatorKind<'tcx> {
             mir::TerminatorKind::Yield { .. }
             | mir::TerminatorKind::CoroutineDrop
             | mir::TerminatorKind::FalseEdge { .. }
-            | mir::TerminatorKind::FalseUnwind { .. } => unreachable!(),
+            | mir::TerminatorKind::FalseUnwind { .. }
+            // We don't include Detach, Reattach, and Sync as parts of the stable MIR b/c a) they're currently marked unstable and b)
+            // we would probably have to fork the stable_mir project which is orthogonal to what we're trying to do at the
+            // moment.
+            | mir::TerminatorKind::Detach { .. }
+            | mir::TerminatorKind::Reattach { .. }
+            | mir::TerminatorKind::Sync { .. } => unreachable!(),
         }
     }
 }

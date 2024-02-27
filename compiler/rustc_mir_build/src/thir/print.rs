@@ -538,6 +538,15 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 self.print_expr(*value, depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl);
             }
+            CilkSpawn { computation } => {
+                print_indented!(self, "CilkSpawn {", depth_lvl);
+                print_indented!(self, "computation:", depth_lvl + 1);
+                self.print_expr(*computation, depth_lvl + 2);
+                print_indented!(self, "}", depth_lvl);
+            }
+            CilkSync => {
+                print_indented!(self, "CilkSync", depth_lvl);
+            }
         }
     }
 

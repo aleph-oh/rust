@@ -798,9 +798,10 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Tup(fields) => ExprKind::Tuple { fields: self.mirror_exprs(fields) },
 
             hir::ExprKind::Yield(v, _) => ExprKind::Yield { value: self.mirror_expr(v) },
-            // TODO(jhilton): add cilk_spawn and cilk_sync to THIR
-            hir::ExprKind::CilkSpawn(_block) => todo!(),
-            hir::ExprKind::CilkSync => todo!(),
+            hir::ExprKind::CilkSpawn(expr) => {
+                ExprKind::CilkSpawn { computation: self.mirror_expr(expr) }
+            }
+            hir::ExprKind::CilkSync => ExprKind::CilkSync,
             hir::ExprKind::Err(_) => unreachable!("cannot lower a `hir::ExprKind::Err` to THIR"),
         };
 

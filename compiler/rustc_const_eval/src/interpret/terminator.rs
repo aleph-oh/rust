@@ -234,6 +234,22 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                         .expect("InlineAsm terminators without noreturn must have a destination"),
                 )
             }
+            Reattach { continuation, destination: _ } => {
+                // NOTE(jhilton): during MIR codegen we should've stored into the destination,
+                // so we don't have to do it here, since some other MIR evaluation will have already
+                // written before we get to the terminator.
+                self.go_to_block(continuation)
+            }
+            Detach { spawned_task, continuation: _ } => {
+                // Assuming that every detached task terminates in a Reattach, we can just go to the
+                // spawned task and it should eventually reattach to the continuation. This happens
+                // to be the serial projection of a Cilk program :).
+                self.go_to_block(spawned_task)
+            }
+            Sync { target } => {
+                // During MIR interpreting, we follow the serial projection, so we just jump to the target.
+                self.go_to_block(target)
+            }
         }
 
         Ok(())

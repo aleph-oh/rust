@@ -144,6 +144,23 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
 
                 self.mutate_place(location, *resume_arg, Deep);
             }
+            TerminatorKind::Reattach { destination, continuation } => {
+                // FIXME(jhilton): This is the same as what Call does with its destination. However, should we
+                // be invalidating locals in the current basic block as well? I think we should be, for consistency
+                // with what we did in the type-checker. My concern is that we only want to kill locals for the
+                // *current block*, which I don't think we're currently expressing. One way to think about modeling this
+                // is that we can imagine Detach as pushing a new stack frame for the spawned task so that way we don't
+                // invalidate all locals, only the locals that are generated in the spawned task.
+                let borrow_set = self.borrow_set;
+                let end_spawned_task =
+                    self.location_table.start_index(continuation.start_location());
+                for (i, data) in borrow_set.iter_enumerated() {
+                    if borrow_of_local_data(data.borrowed_place) {
+                        self.all_facts.loan_invalidated_at.push((end_spawned_task, i))
+                    }
+                }
+                self.mutate_place(location, *destination, Deep);
+            }
             TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::CoroutineDrop => {
@@ -190,7 +207,10 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
             | TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Unreachable
             | TerminatorKind::FalseEdge { real_target: _, imaginary_target: _ }
-            | TerminatorKind::FalseUnwind { real_target: _, unwind: _ } => {
+            | TerminatorKind::FalseUnwind { real_target: _, unwind: _ }
+            | TerminatorKind::Detach { spawned_task: _, continuation: _ }
+            // NOTE(jhilton): even in future, Sync shouldn't invalidate any loans on its own.
+            | TerminatorKind::Sync { .. } => {
                 // no data used, thus irrelevant to borrowck
             }
         }

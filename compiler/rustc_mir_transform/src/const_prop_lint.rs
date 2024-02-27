@@ -816,7 +816,11 @@ impl<'tcx> Visitor<'tcx> for ConstPropagator<'_, 'tcx> {
             | TerminatorKind::FalseEdge { .. }
             | TerminatorKind::FalseUnwind { .. }
             | TerminatorKind::Call { .. }
-            | TerminatorKind::InlineAsm { .. } => {}
+            | TerminatorKind::InlineAsm { .. }
+            // NOTE(jhilton): It might be possible to const-eval a Reattach if you can evalute the entire basic block?
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Sync { .. } => {}
         }
 
         self.worklist.extend(terminator.successors());

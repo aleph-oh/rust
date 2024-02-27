@@ -560,6 +560,19 @@ macro_rules! make_mir_visitor {
                         );
                     }
 
+                    // FIXME(jhilton): I'm not convinced this is the right visitor
+                    // behavior. However, based on the behavior of TerminatorKind::SwitchTargets,
+                    // we visit what's 'involved' in computing the place the terminator goes, and
+                    // these are essentially unconditional jumps.
+
+                    TerminatorKind::Detach { spawned_task: _, continuation: _ } => {}
+
+                    TerminatorKind::Reattach { continuation: _, destination } => {
+                        self.visit_place(destination, PlaceContext::MutatingUse(MutatingUseContext::Call), location);
+                    }
+
+                    TerminatorKind::Sync { .. } => {}
+
                     TerminatorKind::InlineAsm {
                         template: _,
                         operands,

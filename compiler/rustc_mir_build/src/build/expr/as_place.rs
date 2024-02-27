@@ -553,7 +553,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::OffsetOf { .. }
             | ExprKind::Yield { .. }
             | ExprKind::ThreadLocalRef(_)
-            | ExprKind::Call { .. } => {
+            | ExprKind::Call { .. }
+            | ExprKind::CilkSpawn { .. }
+            | ExprKind::CilkSync => {
                 // these are not places, so we need to make a temporary.
                 debug_assert!(!matches!(Category::of(&expr.kind), Some(Category::Place)));
                 let temp =

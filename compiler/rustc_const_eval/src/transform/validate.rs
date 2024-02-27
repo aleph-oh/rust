@@ -510,6 +510,31 @@ impl<'a, 'tcx> Visitor<'tcx> for CfgChecker<'a, 'tcx> {
                 }
             }
             TerminatorKind::Unreachable => {}
+            // NOTE(jhilton): this validation will change when we add unwinding for reattach and detach,
+            // since we'll have to validate the unwind edge.
+            TerminatorKind::Reattach { continuation, destination } => {
+                // NOTE(jhilton): we might need some of the same validation that Call does for the destination.
+                // I don't think we do, though: the spawned task shouldn't be able to reference this place
+                // by construction. Maybe they can if a mutable reference is written to at the end and is
+                // read by the caller?
+                if is_within_packed(self.tcx, &self.body.local_decls, *destination).is_some() {
+                    self.fail(
+                        location,
+                        format!(
+                            "encountered packed place in `Reattach` terminator destination: {:?}",
+                            terminator.kind
+                        ),
+                    );
+                }
+                self.check_edge(location, *continuation, EdgeKind::Normal);
+            }
+            TerminatorKind::Detach { spawned_task, continuation } => {
+                self.check_edge(location, *spawned_task, EdgeKind::Normal);
+                self.check_edge(location, *continuation, EdgeKind::Normal);
+            }
+            TerminatorKind::Sync { target } => {
+                self.check_edge(location, *target, EdgeKind::Normal);
+            }
         }
 
         self.super_terminator(terminator, location);
@@ -1342,7 +1367,13 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
             | TerminatorKind::UnwindResume
             | TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Return
-            | TerminatorKind::Unreachable => {}
+            | TerminatorKind::Unreachable
+            // We don't have any specific type-related validation for Reattach or Detach.
+            // Something else should have already reasoned that our types for the assigned variables
+            // are consistent, and basic blocks don't have types.
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Sync { .. } => {}
         }
 
         self.super_terminator(terminator, location);
