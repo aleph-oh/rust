@@ -148,7 +148,10 @@ where
             | TerminatorKind::Return
             | TerminatorKind::SwitchInt { .. }
             | TerminatorKind::Unreachable
-            | TerminatorKind::Yield { .. } => {}
+            | TerminatorKind::Yield { .. }
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Sync { .. } => {}
         }
     }
 }

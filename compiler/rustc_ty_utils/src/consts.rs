@@ -254,6 +254,13 @@ fn recurse_build<'tcx>(
         ExprKind::InlineAsm { .. } => {
             error(GenericConstantTooComplexSub::InlineAsmNotSupported(node.span))?
         }
+        // FIXME(jhilton): we could support cilk_spawn in const generics, if I'm understanding what this code
+        //  does. We would just take the serial projection, and the outcome is always one possible permutation
+        //  of even code with a determinacy race.
+        ExprKind::CilkSpawn { .. } => {
+            error(GenericConstantTooComplexSub::CilkSpawnNotSupported(node.span))?
+        }
+        ExprKind::CilkSync => error(GenericConstantTooComplexSub::CilkSyncNotSupported(node.span))?,
 
         // we dont permit let stmts so `VarRef` and `UpvarRef` cant happen
         ExprKind::VarRef { .. }
@@ -355,7 +362,9 @@ impl<'a, 'tcx> IsThirPolymorphic<'a, 'tcx> {
             | thir::ExprKind::InlineAsm(_)
             | thir::ExprKind::OffsetOf { .. }
             | thir::ExprKind::ThreadLocalRef(_)
-            | thir::ExprKind::Yield { .. } => false,
+            | thir::ExprKind::Yield { .. }
+            | thir::ExprKind::CilkSpawn { .. }
+            | thir::ExprKind::CilkSync => false,
         }
     }
     fn pat_is_poly(&mut self, pat: &thir::Pat<'tcx>) -> bool {

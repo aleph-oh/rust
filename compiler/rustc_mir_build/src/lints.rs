@@ -213,7 +213,11 @@ impl<'mir, 'tcx, C: TerminatorClassifier<'tcx>> TriColorVisitor<BasicBlocks<'tcx
             | TerminatorKind::FalseEdge { .. }
             | TerminatorKind::FalseUnwind { .. }
             | TerminatorKind::Goto { .. }
-            | TerminatorKind::SwitchInt { .. } => ControlFlow::Continue(()),
+            | TerminatorKind::SwitchInt { .. }
+            // These don't return control to the caller either!
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Sync { .. } => ControlFlow::Continue(()),
         }
     }
 

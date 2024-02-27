@@ -255,6 +255,10 @@ fn filtered_terminator_span(terminator: &Terminator<'_>) -> Option<Span> {
         | TerminatorKind::Yield { .. }
         | TerminatorKind::CoroutineDrop
         | TerminatorKind::FalseUnwind { .. }
+        // NOTE(jhilton): This seems like strange span information to record for reattach and detach but it's probably fine?
+        | TerminatorKind::Detach { .. }
+        | TerminatorKind::Reattach { .. }
+        | TerminatorKind::Sync { .. }
         | TerminatorKind::InlineAsm { .. } => {
             Some(terminator.source_info.span)
         }

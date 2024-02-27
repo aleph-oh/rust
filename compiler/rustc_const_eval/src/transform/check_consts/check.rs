@@ -917,16 +917,24 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
                     .expect("Only expected to have a yield in a coroutine"),
             )),
 
-            TerminatorKind::CoroutineDrop => {
-                span_bug!(
-                    self.body.source_info(location).span,
-                    "We should not encounter TerminatorKind::CoroutineDrop after coroutine transform"
-                );
-            }
+            TerminatorKind::CoroutineDrop => {}
 
             TerminatorKind::UnwindTerminate(_) => {
                 // Cleanup blocks are skipped for const checking (see `visit_basic_block_data`).
                 span_bug!(self.span, "`Terminate` terminator outside of cleanup block")
+            }
+
+            // FIXME(jhilton): make these real errors and not ICEs.
+            TerminatorKind::Detach { .. } => {
+                span_bug!(self.span, "`Detach` not allowed in const context")
+            }
+
+            TerminatorKind::Reattach { .. } => {
+                span_bug!(self.span, "`Reattach` not allowed in const context")
+            }
+
+            TerminatorKind::Sync { .. } => {
+                span_bug!(self.span, "`Sync` not allowed in const context")
             }
 
             TerminatorKind::Assert { .. }

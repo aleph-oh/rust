@@ -834,6 +834,9 @@ impl<'tcx> TerminatorKind<'tcx> {
                 }
                 write!(fmt, ", options({options:?}))")
             }
+            Detach { .. } => write!(fmt, "detach"),
+            Reattach { .. } => write!(fmt, "reattach"),
+            Sync { .. } => write!(fmt, "sync"),
         }
     }
 
@@ -878,6 +881,9 @@ impl<'tcx> TerminatorKind<'tcx> {
                 vec!["unwind".into()]
             }
             InlineAsm { destination: None, unwind: _, .. } => vec![],
+            Detach { .. } => vec!["spawned_task".into(), "continuation".into()],
+            Reattach { .. } => vec!["continuation".into()],
+            Sync { .. } => vec!["target".into()],
         }
     }
 }

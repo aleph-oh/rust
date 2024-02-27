@@ -1296,6 +1296,23 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 self.instance,
                 mergeable_succ(),
             ),
+
+            // FIXME(jhilton): all this codegen is just to no-ops. Change this later :)
+            mir::TerminatorKind::Detach { spawned_task, continuation: _ } => {
+                let target = self.llbb(spawned_task);
+                bx.br(target);
+                MergingSucc::False
+            }
+            mir::TerminatorKind::Reattach { continuation, destination: _ } => {
+                let target = self.llbb(continuation);
+                bx.br(target);
+                MergingSucc::False
+            }
+            mir::TerminatorKind::Sync { target } => {
+                let target = self.llbb(target);
+                bx.br(target);
+                MergingSucc::False
+            }
         }
     }
 

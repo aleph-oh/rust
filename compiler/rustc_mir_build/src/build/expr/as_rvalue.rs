@@ -537,7 +537,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::Become { .. }
             | ExprKind::InlineAsm { .. }
             | ExprKind::PlaceTypeAscription { .. }
-            | ExprKind::ValueTypeAscription { .. } => {
+            | ExprKind::ValueTypeAscription { .. }
+            | ExprKind::CilkSpawn { .. }
+            | ExprKind::CilkSync => {
                 // these do not have corresponding `Rvalue` variants,
                 // so make an operand and then return that
                 debug_assert!(!matches!(

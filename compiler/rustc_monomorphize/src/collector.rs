@@ -892,7 +892,17 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             | mir::TerminatorKind::SwitchInt { .. }
             | mir::TerminatorKind::UnwindResume
             | mir::TerminatorKind::Return
+            // FIXME(jhilton): does this make sense? I think it does, since these other terminators
+            // are also reachable but shouldn't contribute to collection. The only reason I can think
+            // for what this should do instead is to push a lang item for reattach and detach since these
+            // are equivalent to LLVM intrinsics. If this turns out to be the case, add the lang item and
+            // make detach / reattach emit the corresponding lang items in this visitor. Note that call
+            // also ignores the destination so it seems fine here.
+            | mir::TerminatorKind::Detach { spawned_task: _, continuation: _ }
+            | mir::TerminatorKind::Reattach { continuation: _, destination: _ }
+            | mir::TerminatorKind::Sync { target: _ }
             | mir::TerminatorKind::Unreachable => {}
+            // We don't expect these in this stage of the MIR.
             mir::TerminatorKind::CoroutineDrop
             | mir::TerminatorKind::Yield { .. }
             | mir::TerminatorKind::FalseEdge { .. }

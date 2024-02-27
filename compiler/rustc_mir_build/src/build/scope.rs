@@ -1495,7 +1495,13 @@ impl<'tcx> DropTreeBuilder<'tcx> for Unwind {
             | TerminatorKind::Unreachable
             | TerminatorKind::Yield { .. }
             | TerminatorKind::CoroutineDrop
-            | TerminatorKind::FalseEdge { .. } => {
+            | TerminatorKind::FalseEdge { .. }
+            // NOTE(jhilton): if we add proper unwinding semantics for spawned tasks, this will
+            //  probably have to change. You'll get a compile error!
+            // Also, Call doesn't do anything special with its destination so we don't either.
+            | TerminatorKind::Detach { spawned_task: _, continuation: _ }
+            | TerminatorKind::Reattach { continuation: _, destination: _ }
+            | TerminatorKind::Sync { target: _ } => {
                 span_bug!(term.source_info.span, "cannot unwind from {:?}", term.kind)
             }
         }

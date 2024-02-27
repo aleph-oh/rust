@@ -1482,7 +1482,7 @@ impl<'a> Parser<'a> {
                     },
                 )
             } else if this.eat_keyword(kw::CilkSpawn) {
-                // TODO(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
+                // FIXME(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
                 // fine to require all cilk exprs to be in a block I think.
                 this.parse_cilk_spawn_block()
             } else if this.check_inline_const(0) {
@@ -1939,7 +1939,7 @@ impl<'a> Parser<'a> {
     fn parse_expr_cilk_sync(&mut self) -> PResult<'a, P<Expr>> {
         let lo = self.prev_token.span;
         let kind = ExprKind::CilkSync;
-        // TODO(jhilton): we want to add feature gating to this after we get it to minimally work.
+        // FIXME(jhilton): we want to add feature gating to this after we get it to minimally work.
         Ok(self.mk_expr(lo.to(self.prev_token.span), kind))
     }
 

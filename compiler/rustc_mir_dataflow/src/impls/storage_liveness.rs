@@ -276,6 +276,11 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
                 }
             }
 
+            // This is similar to Call: Reattach is where we write to the destination.
+            TerminatorKind::Reattach { continuation: _, destination } => {
+                trans.gen(destination.local);
+            }
+
             // Nothing to do for these. Match exhaustively so this fails to compile when new
             // variants are added.
             TerminatorKind::UnwindTerminate(_)
@@ -288,7 +293,11 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
             | TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::SwitchInt { .. }
-            | TerminatorKind::Unreachable => {}
+            | TerminatorKind::Unreachable
+            // Detach isn't particularly interesting in terms of storage requirements itself.
+            | TerminatorKind::Detach { .. }
+            // Sync also shouldn't need storage.
+            | TerminatorKind::Sync { .. } => {}
         }
     }
 
@@ -312,6 +321,15 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
                 CallReturnPlaces::InlineAsm(operands).for_each(|place| trans.kill(place.local));
             }
 
+            // For reattach terminators we require storage to store the result of the spawned computation.
+            // Currently, we have no panic handling for reattach terminators, so on panic there's no
+            // cleanup, but once we add panic handling we'll kill the destination. This is also relevant
+            // because there should be a Place inside of a TerminatorKind::Reattach.
+            TerminatorKind::Reattach { .. } => {
+                // FIXME(jhilton): fix this when panic handling exists for the spawned computation.
+                // Since there's no special panic behavior (and we don't support them),
+            }
+
             // Nothing to do for these. Match exhaustively so this fails to compile when new
             // variants are added.
             TerminatorKind::Yield { .. }
@@ -325,13 +343,19 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
             | TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::SwitchInt { .. }
-            | TerminatorKind::Unreachable => {}
+            | TerminatorKind::Unreachable
+            | TerminatorKind::Detach { .. }
+            // Sync shouldn't add storage requirements itself. There is an argument that it should be
+            // where all unfilled places that are synced should be filled though, rather than filling
+            // them in the Reattach edge.
+            | TerminatorKind::Sync { .. } => {}
         }
 
         self.check_for_move(trans, loc);
         terminator.edges()
     }
 
+    // FIXME(jhilton): Reattach should probably be added to CallReturnPlaces as well.
     fn call_return_effect(
         &mut self,
         trans: &mut Self::Domain,

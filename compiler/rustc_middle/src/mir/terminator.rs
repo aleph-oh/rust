@@ -376,7 +376,8 @@ impl<'tcx> TerminatorKind<'tcx> {
             | Drop { target: t, unwind: UnwindAction::Cleanup(ref u), .. }
             | Assert { target: t, unwind: UnwindAction::Cleanup(ref u), .. }
             | FalseUnwind { real_target: t, unwind: UnwindAction::Cleanup(ref u) }
-            | InlineAsm { destination: Some(t), unwind: UnwindAction::Cleanup(ref u), .. } => {
+            | InlineAsm { destination: Some(t), unwind: UnwindAction::Cleanup(ref u), .. }
+            | Detach { spawned_task: t, continuation: ref u } => {
                 Some(t).into_iter().chain(slice::from_ref(u).into_iter().copied())
             }
             Goto { target: t }
@@ -387,9 +388,9 @@ impl<'tcx> TerminatorKind<'tcx> {
             | Assert { target: t, unwind: _, .. }
             | FalseUnwind { real_target: t, unwind: _ }
             | InlineAsm { destination: None, unwind: UnwindAction::Cleanup(t), .. }
-            | InlineAsm { destination: Some(t), unwind: _, .. } => {
-                Some(t).into_iter().chain((&[]).into_iter().copied())
-            }
+            | InlineAsm { destination: Some(t), unwind: _, .. }
+            | Reattach { continuation: t, destination: _ }
+            | Sync { target: t } => Some(t).into_iter().chain((&[]).into_iter().copied()),
             UnwindResume
             | UnwindTerminate(_)
             | CoroutineDrop
@@ -421,7 +422,10 @@ impl<'tcx> TerminatorKind<'tcx> {
                 destination: Some(ref mut t),
                 unwind: UnwindAction::Cleanup(ref mut u),
                 ..
-            } => Some(t).into_iter().chain(slice::from_mut(u)),
+            }
+            | Detach { spawned_task: ref mut t, continuation: ref mut u } => {
+                Some(t).into_iter().chain(slice::from_mut(u))
+            }
             Goto { target: ref mut t }
             | Call { target: None, unwind: UnwindAction::Cleanup(ref mut t), .. }
             | Call { target: Some(ref mut t), unwind: _, .. }
@@ -430,9 +434,9 @@ impl<'tcx> TerminatorKind<'tcx> {
             | Assert { target: ref mut t, unwind: _, .. }
             | FalseUnwind { real_target: ref mut t, unwind: _ }
             | InlineAsm { destination: None, unwind: UnwindAction::Cleanup(ref mut t), .. }
-            | InlineAsm { destination: Some(ref mut t), unwind: _, .. } => {
-                Some(t).into_iter().chain(&mut [])
-            }
+            | InlineAsm { destination: Some(ref mut t), unwind: _, .. }
+            | Reattach { continuation: ref mut t, destination: _ }
+            | Sync { target: ref mut t } => Some(t).into_iter().chain(&mut []),
             UnwindResume
             | UnwindTerminate(_)
             | CoroutineDrop
@@ -458,7 +462,11 @@ impl<'tcx> TerminatorKind<'tcx> {
             | TerminatorKind::CoroutineDrop
             | TerminatorKind::Yield { .. }
             | TerminatorKind::SwitchInt { .. }
-            | TerminatorKind::FalseEdge { .. } => None,
+            | TerminatorKind::FalseEdge { .. }
+            // NOTE(jhilton): if unwind behavior changes for spawned tasks, change this code :)
+            | TerminatorKind::Detach { spawned_task: _, continuation: _ }
+            | TerminatorKind::Reattach { continuation: _, destination: _ }
+            | TerminatorKind::Sync { target: _ } => None,
             TerminatorKind::Call { ref unwind, .. }
             | TerminatorKind::Assert { ref unwind, .. }
             | TerminatorKind::Drop { ref unwind, .. }
@@ -478,7 +486,11 @@ impl<'tcx> TerminatorKind<'tcx> {
             | TerminatorKind::CoroutineDrop
             | TerminatorKind::Yield { .. }
             | TerminatorKind::SwitchInt { .. }
-            | TerminatorKind::FalseEdge { .. } => None,
+            | TerminatorKind::FalseEdge { .. }
+            // NOTE(jhilton): if unwind behavior changes for spawned tasks, change this code :)
+            | TerminatorKind::Detach { spawned_task: _, continuation: _ }
+            | TerminatorKind::Reattach { continuation: _, destination: _ }
+            | TerminatorKind::Sync { target: _ } => None,
             TerminatorKind::Call { ref mut unwind, .. }
             | TerminatorKind::Assert { ref mut unwind, .. }
             | TerminatorKind::Drop { ref mut unwind, .. }
@@ -608,6 +620,15 @@ impl<'tcx> TerminatorKind<'tcx> {
             },
 
             SwitchInt { ref targets, ref discr } => TerminatorEdges::SwitchInt { targets, discr },
+
+            Detach { spawned_task, continuation } => {
+                TerminatorEdges::Double(spawned_task, continuation)
+            }
+
+            // FIXME(jhilton): we might want AssignOnReturn or something weird like it (AssignOnSync?). Single isn't exactly correct.
+            Reattach { continuation, destination: _ } => TerminatorEdges::Single(continuation),
+
+            Sync { target } => TerminatorEdges::Single(target),
         }
     }
 }

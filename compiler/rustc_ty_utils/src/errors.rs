@@ -67,6 +67,10 @@ pub enum GenericConstantTooComplexSub {
     InlineAsmNotSupported(#[primary_span] Span),
     #[label(ty_utils_operation_not_supported)]
     OperationNotSupported(#[primary_span] Span),
+    #[label(ty_utils_cilk_spawn_not_supported)]
+    CilkSpawnNotSupported(#[primary_span] Span),
+    #[label(ty_utils_cilk_sync_not_supported)]
+    CilkSyncNotSupported(#[primary_span] Span),
 }
 
 #[derive(Diagnostic)]

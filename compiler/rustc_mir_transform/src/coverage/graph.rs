@@ -6,6 +6,7 @@ use rustc_index::bit_set::BitSet;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{self, BasicBlock, Terminator, TerminatorKind};
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::ops::{Index, IndexMut};
@@ -297,13 +298,13 @@ impl BasicCoverageBlockData {
 /// Holds the coverage-relevant successors of a basic block's terminator, and
 /// indicates whether that block can potentially be combined into the same BCB
 /// as its sole successor.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum CoverageSuccessors<'a> {
     /// The terminator has exactly one straight-line successor, so its block can
     /// potentially be combined into the same BCB as that successor.
     Chainable(BasicBlock),
     /// The block cannot be combined into the same BCB as its successor(s).
-    NotChainable(&'a [BasicBlock]),
+    NotChainable(Cow<'a, [BasicBlock]>),
 }
 
 impl CoverageSuccessors<'_> {
@@ -320,9 +321,13 @@ impl IntoIterator for CoverageSuccessors<'_> {
     type IntoIter = impl DoubleEndedIterator<Item = Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
+        // Sadly, we have to allocate in both cases here because NotChainable has to accept a Cow,
+        // and moving out of a Cow is basically impossible without calling into_owned(). This overall
+        // means that we have to allocate even in the non-Cow case to get the types to agree b/c
+        // we're not using dynamic dispatch.
         match self {
-            Self::Chainable(bb) => Some(bb).into_iter().chain((&[]).iter().copied()),
-            Self::NotChainable(bbs) => None.into_iter().chain(bbs.iter().copied()),
+            Self::Chainable(bb) => vec![bb].into_iter(),
+            Self::NotChainable(bbs) => bbs.into_owned().into_iter(),
         }
     }
 }
@@ -336,11 +341,15 @@ fn bcb_filtered_successors<'a, 'tcx>(terminator: &'a Terminator<'tcx>) -> Covera
     match terminator.kind {
         // A switch terminator can have many coverage-relevant successors.
         // (If there is exactly one successor, we still treat it as not chainable.)
-        SwitchInt { ref targets, .. } => CoverageSuccessors::NotChainable(targets.all_targets()),
+        SwitchInt { ref targets, .. } => {
+            CoverageSuccessors::NotChainable(Cow::Borrowed(targets.all_targets()))
+        }
 
         // A yield terminator has exactly 1 successor, but should not be chained,
         // because its resume edge has a different execution count.
-        Yield { ref resume, .. } => CoverageSuccessors::NotChainable(std::slice::from_ref(resume)),
+        Yield { ref resume, .. } => {
+            CoverageSuccessors::NotChainable(Cow::Borrowed(std::slice::from_ref(resume)))
+        }
 
         // These terminators have exactly one coverage-relevant successor,
         // and can be chained into it.
@@ -355,13 +364,25 @@ fn bcb_filtered_successors<'a, 'tcx>(terminator: &'a Terminator<'tcx>) -> Covera
         Call { target: maybe_target, .. } | InlineAsm { destination: maybe_target, .. } => {
             match maybe_target {
                 Some(target) => CoverageSuccessors::Chainable(target),
-                None => CoverageSuccessors::NotChainable(&[]),
+                None => CoverageSuccessors::NotChainable(Cow::Borrowed(&[])),
             }
+        }
+
+        Detach { spawned_task, continuation } => {
+            // We would ideally return an array instead of allocating a Vec here, but that's not
+            // Cow's default behavior.
+            CoverageSuccessors::NotChainable(Cow::Owned(vec![spawned_task, continuation]))
+        }
+        Reattach { ref continuation, destination: _ } => {
+            CoverageSuccessors::NotChainable(Cow::Borrowed(std::slice::from_ref(continuation)))
+        }
+        Sync { ref target } => {
+            CoverageSuccessors::NotChainable(Cow::Borrowed(std::slice::from_ref(target)))
         }
 
         // These terminators have no coverage-relevant successors.
         CoroutineDrop | Return | Unreachable | UnwindResume | UnwindTerminate(_) => {
-            CoverageSuccessors::NotChainable(&[])
+            CoverageSuccessors::NotChainable(Cow::Borrowed(&[]))
         }
     }
 }

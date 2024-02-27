@@ -1365,6 +1365,11 @@ fn can_unwind<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> bool {
             // will never be reached.
             TerminatorKind::UnwindResume => {}
 
+            // NOTE(jhilton): for now, we say none of these can unwind.
+            TerminatorKind::Reattach { .. } => {}
+            TerminatorKind::Detach { .. } => {}
+            TerminatorKind::Sync { .. } => {}
+
             TerminatorKind::Yield { .. } => {
                 unreachable!("`can_unwind` called before coroutine transform")
             }
@@ -1881,6 +1886,14 @@ impl<'tcx> Visitor<'tcx> for EnsureCoroutineFieldAssignmentsNeverAlias<'_> {
             TerminatorKind::Yield { value, resume: _, resume_arg, drop: _ } => {
                 self.check_assigned_place(*resume_arg, |this| this.visit_operand(value, location));
             }
+
+            // We could check that destination doesn't alias, but we have nothing to call a visitor on other than that destination, so this
+            // seems okay?
+            TerminatorKind::Reattach { destination: _, continuation: _ } => {}
+
+            TerminatorKind::Detach { .. } => {}
+
+            TerminatorKind::Sync { .. } => {}
 
             // FIXME: Does `asm!` have any aliasing requirements?
             TerminatorKind::InlineAsm { .. } => {}
