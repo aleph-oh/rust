@@ -1,3 +1,6 @@
+// Checks that a cilk program without a sync reports an uninitialized variable error.
+// check-fail
+
 fn fib(n: usize) -> usize {
     if n <= 1 {
         return n;

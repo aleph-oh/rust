@@ -1,3 +1,7 @@
+// Checks that a simple Cilk program compiles.
+// build-pass
+// known-bug: unknown
+
 fn fib(n: usize) -> usize {
     if n <= 1 {
         return n;
@@ -9,6 +13,4 @@ fn fib(n: usize) -> usize {
     x + y
 }
 
-fn main() {
-
-}
+fn main() {}
