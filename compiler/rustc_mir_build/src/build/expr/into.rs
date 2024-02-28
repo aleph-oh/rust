@@ -565,9 +565,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     source_info,
                     TerminatorKind::Detach { spawned_task, continuation },
                 );
-                // FIXME(jhilton): is [as_local_rvalue] reasonable here? I think it should be fine since
-                // we're essentially constructing a temporary that gets immediately stored into the
-                // reserved place.
+                // NOTE(jhilton): [as_local_rvalue] should be reasonable here. We're essentially constructing a
+                // temporary that gets immediately stored into the reserved place. The lowering-to-MIR for Assign
+                // does the same thing.
                 let spawned_result =
                     unpack!(spawned_task = this.as_local_rvalue(spawned_task, computation));
 

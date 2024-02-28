@@ -353,7 +353,6 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
         terminator.edges()
     }
 
-    // FIXME(jhilton): Reattach should probably be added to CallReturnPlaces as well.
     fn call_return_effect(
         &mut self,
         trans: &mut Self::Domain,

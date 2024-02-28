@@ -560,10 +560,7 @@ macro_rules! make_mir_visitor {
                         );
                     }
 
-                    // FIXME(jhilton): I'm not convinced this is the right visitor
-                    // behavior. However, based on the behavior of TerminatorKind::SwitchTargets,
-                    // we visit what's 'involved' in computing the place the terminator goes, and
-                    // these are essentially unconditional jumps.
+                    // NOTE(jhilton): this should be the right visitor behavior since there are no direct values to visit.
 
                     TerminatorKind::Detach { spawned_task: _, continuation: _ } => {}
 

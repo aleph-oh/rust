@@ -254,9 +254,6 @@ fn recurse_build<'tcx>(
         ExprKind::InlineAsm { .. } => {
             error(GenericConstantTooComplexSub::InlineAsmNotSupported(node.span))?
         }
-        // FIXME(jhilton): we could support cilk_spawn in const generics, if I'm understanding what this code
-        //  does. We would just take the serial projection, and the outcome is always one possible permutation
-        //  of even code with a determinacy race.
         ExprKind::CilkSpawn { .. } => {
             error(GenericConstantTooComplexSub::CilkSpawnNotSupported(node.span))?
         }

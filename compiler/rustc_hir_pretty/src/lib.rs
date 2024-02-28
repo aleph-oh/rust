@@ -1530,10 +1530,9 @@ impl<'a> State<'a> {
                 self.print_expr_maybe_paren(expr, parser::PREC_JUMP);
             }
             hir::ExprKind::CilkSpawn(expr) => {
-                // FIXME(jhilton): not sure about the precedence we need here to call print_expr_maybe_paren with,
-                //  or if we need the parentheses.
+                // NOTE(jhilton): this precedence should make sense: cilk_spawn is a control flow construct.
                 self.word_space("cilk_spawn");
-                self.print_expr(expr);
+                self.print_expr_maybe_paren(expr, parser::PREC_JUMP);
             }
             hir::ExprKind::CilkSync => {
                 self.word("cilk_sync");

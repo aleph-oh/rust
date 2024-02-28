@@ -410,14 +410,14 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::Match(..)
             | hir::ExprKind::Loop(..)
             | hir::ExprKind::Yield(..)
-            // FIXME(jhilton): for now, we add cilk_spawn to the liveness analysis. Handling cilk_spawn might be a little more
-            //  subtle though.
             | hir::ExprKind::CilkSpawn(..) => {
                 self.add_live_node_for_node(expr.hir_id, ExprNode(expr.span, expr.hir_id));
             }
             hir::ExprKind::Binary(op, ..) if op.node.is_lazy() => {
                 self.add_live_node_for_node(expr.hir_id, ExprNode(expr.span, expr.hir_id));
             }
+
+            // FIXME(jhilton): we have to do a more sophisticated analysis using spawn and sync here.
 
             // otherwise, live nodes are not required:
             hir::ExprKind::Index(..)
@@ -1041,7 +1041,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 self.propagate_through_expr(l, r_succ)
             }
 
-            // FIXME(jhilton): again, it's possible that we have to do something more sophisiticated for cilk_spawn/sync liveness.
+            // NOTE(jhilton): This should be correct. We just need to include the contained expression in our liveness analysis.
             hir::ExprKind::CilkSpawn(expr) => self.propagate_through_expr(expr, succ),
 
             hir::ExprKind::AddrOf(_, _, ref e)
@@ -1406,8 +1406,8 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
         | hir::ExprKind::Path(_)
         | hir::ExprKind::Yield(..)
         | hir::ExprKind::Type(..)
-        // FIXME(jhilton): again, not sure if there are liveness-related correctness conditions for spawn.
-        //  I doubt it based on the handling of loops and method calls.
+        // NOTE(jhilton): there shouldn't be liveness-related correctness conditions here because
+        // they're just control flow.
         | hir::ExprKind::CilkSpawn(..)
         | hir::ExprKind::CilkSync
         | hir::ExprKind::Err(_) => {}
