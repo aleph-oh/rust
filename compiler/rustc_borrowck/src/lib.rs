@@ -812,7 +812,7 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
             // in the same basic block.
             TerminatorKind::Reattach { continuation: _ } => {
                 // Storage for locals in the current basic block should be dead. This is because
-                // in the continuation we won't be able to use locals from the continuation.
+                // in the continuation we won't be able to use locals from the spawned block.
                 // My only problem here is that we only want to kill locals that were created as part of the
                 // current spindle.
                 let borrow_set = self.borrow_set.clone();

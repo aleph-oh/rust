@@ -145,12 +145,12 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
                 self.mutate_place(location, *resume_arg, Deep);
             }
             TerminatorKind::Reattach { continuation } => {
-                // FIXME(jhilton): This is the same as what Call does with its destination. However, should we
-                // be invalidating locals in the current basic block as well? I think we should be, for consistency
-                // with what we did in the type-checker. My concern is that we only want to kill locals for the
+                // FIXME(jhilton): Should we be invalidating locals in the current basic block as well? I think we should be, 
+                // for consistency with what we did in the type-checker. My concern is that we only want to kill locals for the
                 // *current block*, which I don't think we're currently expressing. One way to think about modeling this
                 // is that we can imagine Detach as pushing a new stack frame for the spawned task so that way we don't
-                // invalidate all locals, only the locals that are generated in the spawned task.
+                // invalidate all locals, only the locals that are generated in the spawned task. Alternatively, loan invalidation 
+                // can be handled by however blocks handle this situation.
                 let borrow_set = self.borrow_set;
                 let end_spawned_task =
                     self.location_table.start_index(continuation.start_location());
