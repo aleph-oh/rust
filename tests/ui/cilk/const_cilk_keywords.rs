@@ -2,7 +2,7 @@
 // known-bug: unknown
 
 const fn fib(n: usize) -> usize {
-    if n <= 1 {  
+    if n <= 1 {
         return n;
     }
 
