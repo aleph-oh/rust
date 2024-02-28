@@ -3,6 +3,7 @@ fn fib(n: usize) -> usize {
         return n;
     }
     let x = cilk_spawn { fib(n - 1) };
+//~^ ERROR used binding `x` is possibly-uninitialized [E0381]
     let y = fib(n - 2);
     cilk_sync;
     x + y

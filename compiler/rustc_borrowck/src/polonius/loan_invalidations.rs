@@ -144,7 +144,7 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
 
                 self.mutate_place(location, *resume_arg, Deep);
             }
-            TerminatorKind::Reattach { destination, continuation } => {
+            TerminatorKind::Reattach { continuation } => {
                 // FIXME(jhilton): This is the same as what Call does with its destination. However, should we
                 // be invalidating locals in the current basic block as well? I think we should be, for consistency
                 // with what we did in the type-checker. My concern is that we only want to kill locals for the
@@ -159,7 +159,6 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
                         self.all_facts.loan_invalidated_at.push((end_spawned_task, i))
                     }
                 }
-                self.mutate_place(location, *destination, Deep);
             }
             TerminatorKind::UnwindResume
             | TerminatorKind::Return

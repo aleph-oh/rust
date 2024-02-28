@@ -234,7 +234,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                         .expect("InlineAsm terminators without noreturn must have a destination"),
                 )
             }
-            Reattach { continuation, destination: _ } => {
+            Reattach { continuation } => {
                 // NOTE(jhilton): during MIR codegen we should've stored into the destination,
                 // so we don't have to do it here, since some other MIR evaluation will have already
                 // written before we get to the terminator.

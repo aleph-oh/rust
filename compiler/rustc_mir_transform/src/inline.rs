@@ -1034,7 +1034,7 @@ impl<'tcx> MutVisitor<'tcx> for Integrator<'_, 'tcx> {
                 *spawned_task = self.map_block(*spawned_task);
                 *continuation = self.map_block(*continuation);
             }
-            TerminatorKind::Reattach { ref mut continuation, destination: _ } => {
+            TerminatorKind::Reattach { ref mut continuation } => {
                 *continuation = self.map_block(*continuation);
             }
             TerminatorKind::Sync { ref mut target } => {

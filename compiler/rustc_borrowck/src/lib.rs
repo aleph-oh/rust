@@ -754,11 +754,6 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
                 }
             }
 
-            // NOTE(jhilton): I think this is correct, the only part I'm not sure of is the Deep kind but we used Deep for Call as well.
-            TerminatorKind::Reattach { continuation: _, destination } => {
-                self.mutate_place(loc, (*destination, span), Deep, flow_state);
-            }
-
             TerminatorKind::Goto { target: _ }
             | TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Unreachable
@@ -768,6 +763,7 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
             | TerminatorKind::FalseEdge { real_target: _, imaginary_target: _ }
             | TerminatorKind::FalseUnwind { real_target: _, unwind: _ }
             | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { continuation: _ }
             // FIXME(jhilton): I think at some point we're going to need some integration between BorrowCk and Spawn/Sync so we can mark
             // what regions of code need to have sync types.
             | TerminatorKind::Sync { .. } => {
@@ -814,7 +810,7 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
             // FIXME(jhilton): we might need to do something new here since neither Return or Yield
             // really do the same thing. Any borrows to locals should be invalidated as long as they're
             // in the same basic block.
-            TerminatorKind::Reattach { continuation: _, destination: _ } => {
+            TerminatorKind::Reattach { continuation: _ } => {
                 // Storage for locals in the current basic block should be dead. This is because
                 // in the continuation we won't be able to use locals from the continuation.
                 // My only problem here is that we only want to kill locals that were created as part of the

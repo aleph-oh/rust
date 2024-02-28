@@ -813,7 +813,10 @@ pub enum TerminatorKind<'tcx> {
     /// For a spawned task, allows to resume and execute the original continuation. Cilk is
     /// continuation-stealing so the spawned task will immediately execute, but this should not change
     /// program semantics.
-    Reattach { continuation: BasicBlock, destination: Place<'tcx> },
+    // NOTE(jhilton): when we codegen a reattach, we make sure that the assignment happens before the terminator,
+    // so we shouldn't need to make the edges of some type that expresses that we're going to assign. This simplifies
+    // generating LLVM IR so that we don't have to duplicate the code of an assignment.
+    Reattach { continuation: BasicBlock },
 
     /// Marks a basic block terminated by a cilk_sync, which waits for spawned tasks to complete.
     /// Representing Sync as a terminator means that we can assume any block after a sync which is not

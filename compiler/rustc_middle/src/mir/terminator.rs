@@ -389,7 +389,7 @@ impl<'tcx> TerminatorKind<'tcx> {
             | FalseUnwind { real_target: t, unwind: _ }
             | InlineAsm { destination: None, unwind: UnwindAction::Cleanup(t), .. }
             | InlineAsm { destination: Some(t), unwind: _, .. }
-            | Reattach { continuation: t, destination: _ }
+            | Reattach { continuation: t }
             | Sync { target: t } => Some(t).into_iter().chain((&[]).into_iter().copied()),
             UnwindResume
             | UnwindTerminate(_)
@@ -435,7 +435,7 @@ impl<'tcx> TerminatorKind<'tcx> {
             | FalseUnwind { real_target: ref mut t, unwind: _ }
             | InlineAsm { destination: None, unwind: UnwindAction::Cleanup(ref mut t), .. }
             | InlineAsm { destination: Some(ref mut t), unwind: _, .. }
-            | Reattach { continuation: ref mut t, destination: _ }
+            | Reattach { continuation: ref mut t }
             | Sync { target: ref mut t } => Some(t).into_iter().chain(&mut []),
             UnwindResume
             | UnwindTerminate(_)
@@ -465,7 +465,7 @@ impl<'tcx> TerminatorKind<'tcx> {
             | TerminatorKind::FalseEdge { .. }
             // NOTE(jhilton): if unwind behavior changes for spawned tasks, change this code :)
             | TerminatorKind::Detach { spawned_task: _, continuation: _ }
-            | TerminatorKind::Reattach { continuation: _, destination: _ }
+            | TerminatorKind::Reattach { continuation: _ }
             | TerminatorKind::Sync { target: _ } => None,
             TerminatorKind::Call { ref unwind, .. }
             | TerminatorKind::Assert { ref unwind, .. }
@@ -489,7 +489,7 @@ impl<'tcx> TerminatorKind<'tcx> {
             | TerminatorKind::FalseEdge { .. }
             // NOTE(jhilton): if unwind behavior changes for spawned tasks, change this code :)
             | TerminatorKind::Detach { spawned_task: _, continuation: _ }
-            | TerminatorKind::Reattach { continuation: _, destination: _ }
+            | TerminatorKind::Reattach { continuation: _ }
             | TerminatorKind::Sync { target: _ } => None,
             TerminatorKind::Call { ref mut unwind, .. }
             | TerminatorKind::Assert { ref mut unwind, .. }
@@ -625,8 +625,10 @@ impl<'tcx> TerminatorKind<'tcx> {
                 TerminatorEdges::Double(spawned_task, continuation)
             }
 
-            // FIXME(jhilton): we might want AssignOnReturn or something weird like it (AssignOnSync?). Single isn't exactly correct.
-            Reattach { continuation, destination: _ } => TerminatorEdges::Single(continuation),
+            // NOTE(jhilton): when we codegen a reattach, we make sure that the assignment happens before the terminator,
+            // so we shouldn't need to make the edges of some type that expresses that we're going to assign. This simplifies
+            // generating LLVM IR so that we don't have to duplicate the code of an assignment.
+            Reattach { continuation } => TerminatorEdges::Single(continuation),
 
             Sync { target } => TerminatorEdges::Single(target),
         }

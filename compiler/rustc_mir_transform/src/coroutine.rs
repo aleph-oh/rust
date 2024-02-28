@@ -1887,9 +1887,7 @@ impl<'tcx> Visitor<'tcx> for EnsureCoroutineFieldAssignmentsNeverAlias<'_> {
                 self.check_assigned_place(*resume_arg, |this| this.visit_operand(value, location));
             }
 
-            // We could check that destination doesn't alias, but we have nothing to call a visitor on other than that destination, so this
-            // seems okay?
-            TerminatorKind::Reattach { destination: _, continuation: _ } => {}
+            TerminatorKind::Reattach { continuation: _ } => {}
 
             TerminatorKind::Detach { .. } => {}
 
