@@ -571,18 +571,18 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 let spawned_result =
                     unpack!(spawned_task = this.as_local_rvalue(spawned_task, computation));
 
+                // Store the result into the reserved destination for the spawn result.
+                this.cfg.push_assign(spawned_task, source_info, destination, spawned_result);
+
                 let task_span = this.thir[computation].span;
                 let task_source_info = this.source_info(task_span);
                 this.cfg.terminate(
                     spawned_task,
                     task_source_info,
-                    TerminatorKind::Reattach { continuation, destination },
+                    TerminatorKind::Reattach { continuation },
                 );
 
                 block = continuation;
-
-                // Store the result into the reserved destination for the spawn result.
-                this.cfg.push_assign(block, source_info, destination, spawned_result);
                 block.unit()
             }
 

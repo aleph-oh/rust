@@ -373,7 +373,7 @@ fn bcb_filtered_successors<'a, 'tcx>(terminator: &'a Terminator<'tcx>) -> Covera
             // Cow's default behavior.
             CoverageSuccessors::NotChainable(Cow::Owned(vec![spawned_task, continuation]))
         }
-        Reattach { ref continuation, destination: _ } => {
+        Reattach { ref continuation } => {
             CoverageSuccessors::NotChainable(Cow::Borrowed(std::slice::from_ref(continuation)))
         }
         Sync { ref target } => {

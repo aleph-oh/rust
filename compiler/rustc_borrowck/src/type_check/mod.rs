@@ -1405,6 +1405,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
             | TerminatorKind::FalseUnwind { .. }
             | TerminatorKind::InlineAsm { .. }
             | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { continuation: _ }
             | TerminatorKind::Sync { .. } => {
                 // no checks needed for these
             }
@@ -1574,16 +1575,6 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                         }
                     }
                 }
-            }
-            TerminatorKind::Reattach { continuation: _, destination: _ } => {
-                // FIXME(jhilton): this should definitely type-check the destination. It's also
-                // probably where we have to think about expressing Cilk semantics in terms of
-                // the borrow checker: the spawned basic block is logically in parallel with
-                // the continuation, so the current basic block should be borrow-checked and
-                // aliasing-xor-mutability-checked against the continuation. This should actually
-                // generalize to spindles, so we'll probably have to introduce that concept to
-                // the borrow checker.
-                span_mirbug!(self, term, "support for reattach in type-checking isn't done yet!")
             }
         }
     }
@@ -1785,7 +1776,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                 }
                 self.assert_iscleanup_unwind(body, block_data, unwind, is_cleanup);
             }
-            TerminatorKind::Reattach { continuation: _, destination: _ } => {
+            TerminatorKind::Reattach { continuation: _ } => {
                 if is_cleanup {
                     span_mirbug!(self, block_data, "reattach in cleanup block");
                 }

@@ -1,22 +1,12 @@
-error[E0381]: used binding is possibly-uninitialized
-  --> $DIR/fib_block_recurse.rs:5:24
+error[E0381]: used binding `x` is possibly-uninitialized
+  --> $DIR/fib_block_recurse.rs:5:9
    |
 LL |     let x = cilk_spawn { fib(n - 1) };
-   |                        ^^^^^^^^^^^^^^
-   |                        |
-   |                        value used here but it is possibly-uninitialized
-   |                        binding declared here but left uninitialized
-
-error[E0384]: cannot assign twice to immutable variable `x`
-  --> $DIR/fib_block_recurse.rs:5:24
-   |
-LL |     let x = cilk_spawn { fib(n - 1) };
-   |         -              ^^^^^^^^^^^^^^ cannot assign twice to immutable variable
+   |         ^
    |         |
-   |         first assignment to `x`
-   |         help: consider making this binding mutable: `mut x`
+   |         `x` used here but it is possibly-uninitialized
+   |         binding declared here but left uninitialized
 
-error: aborting due to 2 previous errors
+error: aborting due to 1 previous error
 
-Some errors have detailed explanations: E0381, E0384.
-For more information about an error, try `rustc --explain E0381`.
+For more information about this error, try `rustc --explain E0381`.

@@ -652,15 +652,13 @@ impl WriteInfo {
                     }
                 }
             }
-            TerminatorKind::Reattach { continuation: _, destination } => {
-                self.add_place(*destination);
-            }
             TerminatorKind::Goto { .. }
             | TerminatorKind::UnwindResume
             | TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Return
             | TerminatorKind::Unreachable { .. }
             | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { continuation: _ }
             | TerminatorKind::Sync { .. } => (),
             TerminatorKind::Drop { .. } => {
                 // `Drop`s create a `&mut` and so are not considered

@@ -1303,7 +1303,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 bx.br(target);
                 MergingSucc::False
             }
-            mir::TerminatorKind::Reattach { continuation, destination: _ } => {
+            mir::TerminatorKind::Reattach { continuation } => {
                 let target = self.llbb(continuation);
                 bx.br(target);
                 MergingSucc::False

@@ -899,7 +899,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             // make detach / reattach emit the corresponding lang items in this visitor. Note that call
             // also ignores the destination so it seems fine here.
             | mir::TerminatorKind::Detach { spawned_task: _, continuation: _ }
-            | mir::TerminatorKind::Reattach { continuation: _, destination: _ }
+            | mir::TerminatorKind::Reattach { continuation: _ }
             | mir::TerminatorKind::Sync { target: _ }
             | mir::TerminatorKind::Unreachable => {}
             // We don't expect these in this stage of the MIR.

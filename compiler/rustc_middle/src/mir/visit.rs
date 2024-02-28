@@ -567,9 +567,7 @@ macro_rules! make_mir_visitor {
 
                     TerminatorKind::Detach { spawned_task: _, continuation: _ } => {}
 
-                    TerminatorKind::Reattach { continuation: _, destination } => {
-                        self.visit_place(destination, PlaceContext::MutatingUse(MutatingUseContext::Call), location);
-                    }
+                    TerminatorKind::Reattach { continuation: _ } => {}
 
                     TerminatorKind::Sync { .. } => {}
 

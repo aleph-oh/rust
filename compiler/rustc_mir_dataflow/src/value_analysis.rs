@@ -268,12 +268,6 @@ pub trait ValueAnalysis<'tcx> {
             TerminatorKind::SwitchInt { discr, targets } => {
                 return self.handle_switch_int(discr, targets, state);
             }
-            // This is essentially what happens in a Call except for only one place.
-            // Since this is a dataflow analysis then we should actually not be certain that it's
-            // been written to because of the other path to the continuation Detach provides.
-            TerminatorKind::Reattach { continuation: _, destination } => {
-                state.flood(destination.as_ref(), self.map())
-            }
             TerminatorKind::Goto { .. }
             | TerminatorKind::UnwindResume
             | TerminatorKind::UnwindTerminate(_)
@@ -285,9 +279,11 @@ pub trait ValueAnalysis<'tcx> {
             | TerminatorKind::FalseUnwind { .. }
             // Detach shouldn't affect this analysis as far as I can tell.
             | TerminatorKind::Detach { .. }
+            // Since Reattach doesn't do the assignment itself, it doesn't have a role in this analysis.
+            | TerminatorKind::Reattach { continuation: _ }
             // It's possible that Sync should affect this analysis to make it less pessimistic.
             // Similar to TaskInfoAnalysis in OpenCilk.
-            | TerminatorKind::Sync { .. }=> {
+            | TerminatorKind::Sync { .. } => {
                 // These terminators have no effect on the analysis.
             }
         }

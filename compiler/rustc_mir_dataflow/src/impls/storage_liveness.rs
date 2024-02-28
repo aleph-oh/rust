@@ -276,10 +276,6 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
                 }
             }
 
-            // This is similar to Call: Reattach is where we write to the destination.
-            TerminatorKind::Reattach { continuation: _, destination } => {
-                trans.gen(destination.local);
-            }
 
             // Nothing to do for these. Match exhaustively so this fails to compile when new
             // variants are added.
@@ -296,6 +292,8 @@ impl<'tcx> crate::GenKillAnalysis<'tcx> for MaybeRequiresStorage<'_, 'tcx> {
             | TerminatorKind::Unreachable
             // Detach isn't particularly interesting in terms of storage requirements itself.
             | TerminatorKind::Detach { .. }
+            // Reattach doesn't perform the assignment itself.
+            | TerminatorKind::Reattach { continuation: _ }
             // Sync also shouldn't need storage.
             | TerminatorKind::Sync { .. } => {}
         }
