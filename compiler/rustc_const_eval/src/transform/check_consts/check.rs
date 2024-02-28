@@ -924,19 +924,6 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
                 span_bug!(self.span, "`Terminate` terminator outside of cleanup block")
             }
 
-            // FIXME(jhilton): make these real errors and not ICEs.
-            TerminatorKind::Detach { .. } => {
-                span_bug!(self.span, "`Detach` not allowed in const context")
-            }
-
-            TerminatorKind::Reattach { .. } => {
-                span_bug!(self.span, "`Reattach` not allowed in const context")
-            }
-
-            TerminatorKind::Sync { .. } => {
-                span_bug!(self.span, "`Sync` not allowed in const context")
-            }
-
             TerminatorKind::Assert { .. }
             | TerminatorKind::FalseEdge { .. }
             | TerminatorKind::FalseUnwind { .. }
@@ -944,6 +931,9 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
             | TerminatorKind::UnwindResume
             | TerminatorKind::Return
             | TerminatorKind::SwitchInt { .. }
+            | TerminatorKind::Detach { .. }
+            | TerminatorKind::Reattach { .. }
+            | TerminatorKind::Sync { .. }
             | TerminatorKind::Unreachable => {}
         }
     }
