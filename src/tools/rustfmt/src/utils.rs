@@ -478,6 +478,7 @@ pub(crate) fn is_block_expr(context: &RewriteContext<'_>, expr: &ast::Expr, repr
         | ast::ExprKind::Loop(..)
         | ast::ExprKind::ForLoop { .. }
         | ast::ExprKind::TryBlock(..)
+        | ast::ExprKind::CilkSpawn(..)
         | ast::ExprKind::Match(..) => repr.contains('\n'),
         ast::ExprKind::Paren(ref expr)
         | ast::ExprKind::Binary(_, _, ref expr)
@@ -512,7 +513,8 @@ pub(crate) fn is_block_expr(context: &RewriteContext<'_>, expr: &ast::Expr, repr
         | ast::ExprKind::Tup(..)
         | ast::ExprKind::Type(..)
         | ast::ExprKind::Yield(None)
-        | ast::ExprKind::Underscore => false,
+        | ast::ExprKind::Underscore
+        | ast::ExprKind::CilkSync => false,
     }
 }
 
