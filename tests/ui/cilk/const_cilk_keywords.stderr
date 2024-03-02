@@ -1,5 +1,5 @@
 error[E0381]: used binding `x` is possibly-uninitialized
-  --> $DIR/const_cilk_keywords.rs:9:9
+  --> $DIR/const_cilk_keywords.rs:10:9
    |
 LL |     let x = cilk_spawn { fib(n - 1) };
    |         ^

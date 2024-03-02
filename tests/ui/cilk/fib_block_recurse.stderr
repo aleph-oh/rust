@@ -1,5 +1,5 @@
 error[E0381]: used binding `x` is possibly-uninitialized
-  --> $DIR/fib_block_recurse.rs:8:9
+  --> $DIR/fib_block_recurse.rs:9:9
    |
 LL |     let x = cilk_spawn { fib(n - 1) };
    |         ^
