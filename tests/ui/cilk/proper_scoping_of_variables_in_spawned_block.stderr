@@ -1,11 +1,11 @@
 error[E0425]: cannot find value `y` in this scope
-  --> $DIR/proper_scoping_of_variables_in_spawned_block.rs:4:22
+  --> $DIR/proper_scoping_of_variables_in_spawned_block.rs:5:22
    |
 LL |     println!("y={}", y);
    |                      ^
    |
 help: the binding `y` is available in a different scope in the same function
-  --> $DIR/proper_scoping_of_variables_in_spawned_block.rs:3:30
+  --> $DIR/proper_scoping_of_variables_in_spawned_block.rs:4:30
    |
 LL |     let _ = cilk_spawn { let y = 5; y };
    |                              ^

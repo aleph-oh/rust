@@ -1,0 +1,21 @@
+error[E0658]: cilk keywords are experimental
+  --> $DIR/cilk.rs:2:16
+   |
+LL |     cilk_spawn { 5 };
+   |                ^^^^^
+   |
+   = help: add `#![feature(cilk)]` to the crate attributes to enable
+   = note: this compiler was built on YYYY-MM-DD; consider upgrading it if it is out of date
+
+error[E0658]: cilk keywords are experimental
+  --> $DIR/cilk.rs:3:5
+   |
+LL |     cilk_sync;
+   |     ^^^^^^^^^
+   |
+   = help: add `#![feature(cilk)]` to the crate attributes to enable
+   = note: this compiler was built on YYYY-MM-DD; consider upgrading it if it is out of date
+
+error: aborting due to 2 previous errors
+
+For more information about this error, try `rustc --explain E0658`.
