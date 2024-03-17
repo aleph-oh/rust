@@ -86,6 +86,7 @@ use crate::errors;
 use self::LiveNodeKind::*;
 use self::VarKind::*;
 
+use itertools::Itertools;
 use rustc_ast::InlineAsmOptions;
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_hir as hir;
@@ -157,6 +158,12 @@ fn check_liveness(tcx: TyCtxt<'_>, def_id: LocalDefId) {
     let hir_id = tcx.hir().body_owner(body_id);
     let body = tcx.hir().body(body_id);
 
+    // Compute the spindles. TODO(jhilton): use this information to make the liveness analysis more
+    // accurate.
+    let mut spindles = SpindleVisitor::new();
+    spindles.visit_body(body);
+    spindles.validate();
+
     if let Some(upvars) = tcx.upvars_mentioned(def_id) {
         for &var_hir_id in upvars.keys() {
             let var_name = tcx.hir().name(var_hir_id);
@@ -181,6 +188,136 @@ fn check_liveness(tcx: TyCtxt<'_>, def_id: LocalDefId) {
 
 pub fn provide(providers: &mut Providers) {
     *providers = Providers { check_liveness, ..*providers };
+}
+
+struct SpindleData {
+    parent: Option<Spindle>,
+    children: Vec<Spindle>,
+    // It doesn't really make sense to store the start and ending expressions in my mind.
+    // Spans aren't that useful for a user since a spindle isn't a userland concept.
+}
+
+impl SpindleData {
+    fn orphan() -> SpindleData {
+        SpindleData { parent: None, children: vec![] }
+    }
+
+    fn with_parent(parent: Spindle, spindles: &mut IndexVec<Spindle, SpindleData>) -> Spindle {
+        let child_data = SpindleData { parent: Some(parent), children: vec![] };
+        let child = spindles.push(child_data);
+        spindles[parent].children.push(child);
+        child
+    }
+}
+
+rustc_index::newtype_index! {
+    #[debug_format = "sp({})"]
+    struct Spindle {}
+}
+
+/// This visitor collects information about the spindles in the program, determining which
+/// expressions belong in which spindles and the state of the spindle tree.
+struct SpindleVisitor {
+    /// All spindles in the visited section of code.
+    spindles: IndexVec<Spindle, SpindleData>,
+    /// Maps the HIR IDs of expressions to their containing spindle.
+    expr_to_spindle: rustc_data_structures::fx::FxHashMap<HirId, Spindle>,
+
+    /// The current spindle that we're extending.
+    /// This state isn't part of the visitor result, but should probably always be Spindle(0).
+    current_spindle: Spindle,
+}
+
+impl SpindleVisitor {
+    fn new() -> Self {
+        let initial_spindle = SpindleData::orphan();
+        let mut spindles: IndexVec<Spindle, _> = IndexVec::new();
+        let current_spindle = spindles.push(initial_spindle);
+        let expr_to_spindle = rustc_data_structures::fx::FxHashMap::default();
+        SpindleVisitor { spindles, expr_to_spindle, current_spindle }
+    }
+
+    // We're okay with query instability here because this is only for validating the results of SpindleVisitor, not for any
+    // actual query result output. Additionally, we sort by a given key, so it should still be stable.
+    #[allow(rustc::potential_query_instability)]
+    fn validate(&self) {
+        // current_spindle should be a valid index into spindles.
+        assert!(
+            self.spindles.get(self.current_spindle).is_some(),
+            "expected `current_spindle` = {:?} to be in `spindles`",
+            self.current_spindle
+        );
+
+        let mapped_spindles: rustc_data_structures::fx::FxHashSet<_> =
+            self.expr_to_spindle.values().copied().collect();
+        let all_spindles: rustc_data_structures::fx::FxHashSet<_> =
+            self.spindles.indices().collect();
+        // All spindle indices in expr_to_spindle should be valid indices into expr_to_spindle.
+        assert!(
+            all_spindles.is_superset(&mapped_spindles),
+            "expected all spindles in `expr_to_spindle` to be in `spindles`, but found spindles {} which were not",
+            mapped_spindles
+                .difference(&all_spindles)
+                .copied()
+                .map(Spindle::as_usize)
+                .sorted_unstable()
+                .join(", ")
+        );
+        // Every spindle should contain at least one expression -> every spindle should be mapped to.
+        assert_eq!(
+            all_spindles,
+            mapped_spindles,
+            "expected all spindles in `spindles` to contain at least one expression, but found spindles {} which were not",
+            all_spindles
+                .difference(&mapped_spindles)
+                .copied()
+                .map(Spindle::as_usize)
+                .sorted_unstable()
+                .join(", ")
+        );
+
+        // Now we have to make sure that all Spindles referenced in the spindle tree are valid references.
+        // `spindles` is a contiguous collection, so we know that if the spindle isn't in the range [0, spindles.len()),
+        // it's not in the IndexVec.
+        let invalid_spindle_references: rustc_data_structures::fx::FxHashSet<_> = self
+            .spindles
+            .iter()
+            .flat_map(|spindle| spindle.parent.iter().chain(spindle.children.iter()))
+            .filter(|spindle| spindle.as_usize() >= self.spindles.len())
+            .copied()
+            .collect();
+        let invalid_spindle_references: Vec<_> = invalid_spindle_references
+            .into_iter()
+            .sorted_unstable_by_key(|spindle| spindle.as_usize())
+            .collect();
+        assert!(
+            invalid_spindle_references.is_empty(),
+            "expected all spindles referenced in `spindles` to exist in `spindles`, but found spindles {} which were not",
+            invalid_spindle_references.into_iter().map(Spindle::as_usize).join(", ")
+        );
+    }
+}
+
+impl<'tcx> Visitor<'tcx> for SpindleVisitor {
+    fn visit_expr(&mut self, expr: &'tcx Expr<'tcx>) {
+        // Spawns start a new spindle for the contained expression, which is the child of the current spindle.
+        if let hir::ExprKind::CilkSpawn(spawned_task) = expr.kind {
+            let parent = self.current_spindle;
+            self.current_spindle = SpindleData::with_parent(parent, &mut self.spindles);
+            intravisit::walk_expr(self, spawned_task);
+            self.current_spindle = parent;
+        }
+
+        // Now we have to associate the current expression with the current spindle, regardless of what
+        // it is. Note that for a spawn, this puts the spawn in the parent spindle and the spawned task in
+        // the child.
+        let existing_spindle = self.expr_to_spindle.insert(expr.hir_id, self.current_spindle);
+        assert!(
+            existing_spindle.is_none(),
+            "expected no spindle to be mapped for HIR ID {}",
+            expr.hir_id
+        );
+    }
 }
 
 // ______________________________________________________________________
