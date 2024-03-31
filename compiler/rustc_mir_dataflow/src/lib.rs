@@ -31,6 +31,7 @@ pub mod elaborate_drops;
 mod errors;
 mod framework;
 pub mod impls;
+mod mark_cilk_tasks;
 pub mod move_paths;
 pub mod points;
 pub mod rustc_peek;
