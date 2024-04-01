@@ -70,11 +70,29 @@ impl TaskTree {
         );
     }
 
+    /// Create a new TaskTree.
     pub fn new() -> Self {
         Self {
             tasks: IndexVec::new(),
             basic_blocks: rustc_data_structures::fx::FxHashMap::default(),
         }
+    }
+
+    fn task(&self, block: BasicBlock) -> Option<Task> {
+        self.basic_blocks.get(&block).copied()
+    }
+
+    /// Get the task for the given location, panicking if it doesn't exist.
+    pub fn expect_task(&self, location: mir::Location) -> Task {
+        self.task(location.block).expect("expected block to have a task!")
+    }
+
+    /// Get the last locations of the children of this task.
+    pub fn children_last_locations(&self, task: Task) -> impl Iterator<Item = mir::Location> + '_ {
+        self.tasks[task]
+            .children
+            .iter()
+            .flat_map(move |&child| self.tasks[child].last_locations.iter().copied())
     }
 }
 
