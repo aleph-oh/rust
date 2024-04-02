@@ -892,7 +892,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             | mir::TerminatorKind::SwitchInt { .. }
             | mir::TerminatorKind::UnwindResume
             | mir::TerminatorKind::Return
-            // NOTE(jhilton): we don't have to do any monomorphization collection because none of 
+            // NOTE(jhilton): we don't have to do any monomorphization collection because none of
             // these terminators work with values, only with blocks.
             | mir::TerminatorKind::Detach { spawned_task: _, continuation: _ }
             | mir::TerminatorKind::Reattach { continuation: _ }

@@ -5,7 +5,7 @@
 // rather than at the sync. There's another test that borrows are live before a sync.
 fn main() {
     let mut s = String::from("hello");
-    cilk_spawn { 
+    cilk_spawn {
         println!("{}", &s);
     };
     cilk_sync;
