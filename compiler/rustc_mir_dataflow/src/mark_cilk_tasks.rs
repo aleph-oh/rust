@@ -107,6 +107,72 @@ impl TaskTree {
         self.tasks[task].last_locations.iter().copied()
     }
 
+    /// Modify this task tree by detaching from the current task, spawning a new task, and
+    /// labeling the continuation block with the current task.
+    fn detach_at(
+        &mut self,
+        current_task: Task,
+        spawned_task: BasicBlock,
+        continuation: BasicBlock,
+    ) {
+        self.label_block(continuation, current_task);
+        let new_task = self.tasks.push(TaskData {
+            parent: Some(current_task),
+            children: vec![],
+            last_locations: vec![],
+        });
+        self.tasks[current_task].children.push(new_task);
+        self.label_block(spawned_task, new_task);
+    }
+
+    /// Modify this task tree by reattaching to the parent task of `current_task` at the given location.
+    fn reattach_at(&mut self, location: Location, current_task: Task, continuation: BasicBlock) {
+        let current_task_data = &mut self.tasks[current_task];
+
+        // Reattach is the only way for the task to change to some other task in a way that
+        // won't return control to the current task, so we want to add it as a "last location".
+        current_task_data.last_locations.push(location);
+
+        let parent =
+            current_task_data.parent.expect("expected current task to have parent if reattaching!");
+        // NOTE(jhilton): As long as reattach_at is called only in a preorder traversal, we should expect that
+        // the block is labeled with the parent task already since the continuation should have
+        // been visited before we looked at successors of the spawned task.
+        self.label_block(continuation, parent);
+
+        debug_assert!(
+            self.tasks[parent].children.contains(&current_task),
+            "the current task should be a child of the task being reattached to!"
+        );
+    }
+
+    /// Modify this task tree by adding all blocks that the terminator can go to, to the current task.
+    fn add_edges_to_current_task(&mut self, current_task: Task, terminator: &mir::Terminator<'_>) {
+        match terminator.edges() {
+            mir::TerminatorEdges::None => {
+                // No targets, nothing to do
+            }
+            mir::TerminatorEdges::Single(target) => {
+                self.label_block(target, current_task);
+            }
+            mir::TerminatorEdges::Double(target1, target2) => {
+                self.label_block(target1, current_task);
+                self.label_block(target2, current_task);
+            }
+            mir::TerminatorEdges::AssignOnReturn { return_, cleanup, place: _ } => {
+                for target in return_.into_iter().chain(cleanup.into_iter()) {
+                    self.label_block(target, current_task);
+                }
+            }
+            mir::TerminatorEdges::SwitchInt { targets, discr: _ } => {
+                for target in targets.all_targets() {
+                    self.label_block(*target, current_task);
+                }
+            }
+        }
+    }
+
+    /// Create a TaskTree from a MIR body.
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         // We use this instead of a visitor because we want to control the iteration order.
         // We need to know that all ancestors of a block are visited before the block itself.
@@ -129,58 +195,16 @@ impl TaskTree {
             let terminator = block_data.terminator();
             match terminator.kind {
                 mir::TerminatorKind::Detach { spawned_task, continuation } => {
-                    task_tree.label_block(continuation, current_task);
-                    let new_task = task_tree.tasks.push(TaskData {
-                        parent: Some(current_task),
-                        children: vec![],
-                        last_locations: vec![],
-                    });
-                    task_tree.tasks[current_task].children.push(new_task);
-                    task_tree.label_block(spawned_task, new_task);
+                    task_tree.detach_at(current_task, spawned_task, continuation);
                 }
                 mir::TerminatorKind::Reattach { continuation } => {
-                    let current_task_data = &mut task_tree.tasks[current_task];
-
-                    // Reattach is the only way for the task to change to some other task in a way that
-                    // won't return control to the current task, so we want to add it as a "last location".
-                    current_task_data.last_locations.push(location);
-
-                    let parent = current_task_data
-                        .parent
-                        .expect("expected current task to have parent if reattaching!");
-                    task_tree.label_block(continuation, parent);
-
-                    debug_assert!(
-                        task_tree.tasks[parent].children.contains(&current_task),
-                        "the current task should be a child of the task being reattached to!"
-                    );
+                    task_tree.reattach_at(location, current_task, continuation);
                 }
                 _ => {
                     // For all other terminators, we want to mark all targets as children of the current task.
                     // This might have the wrong semantics with panics and unwinding? Hopefully sync insertion
                     // can make that a nonissue.
-                    match terminator.edges() {
-                        mir::TerminatorEdges::None => {
-                            // No targets, nothing to do
-                        }
-                        mir::TerminatorEdges::Single(target) => {
-                            task_tree.label_block(target, current_task);
-                        }
-                        mir::TerminatorEdges::Double(target1, target2) => {
-                            task_tree.label_block(target1, current_task);
-                            task_tree.label_block(target2, current_task);
-                        }
-                        mir::TerminatorEdges::AssignOnReturn { return_, cleanup, place: _ } => {
-                            for target in return_.into_iter().chain(cleanup.into_iter()) {
-                                task_tree.label_block(target, current_task);
-                            }
-                        }
-                        mir::TerminatorEdges::SwitchInt { targets, discr: _ } => {
-                            for target in targets.all_targets() {
-                                task_tree.label_block(*target, current_task);
-                            }
-                        }
-                    }
+                    task_tree.add_edges_to_current_task(current_task, terminator);
                 }
             }
         }
