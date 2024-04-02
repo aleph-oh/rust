@@ -94,6 +94,17 @@ impl TaskTree {
             .iter()
             .flat_map(move |&child| self.tasks[child].last_locations.iter().copied())
     }
+
+    /// Get an iterator over child tasks and their last locations.
+    pub fn last_locations_by_child(
+        &self,
+        task: Task,
+    ) -> impl Iterator<Item = (Task, &[mir::Location])> + '_ {
+        self.tasks[task]
+            .children
+            .iter()
+            .map(|&child| (child, self.tasks[child].last_locations.as_ref()))
+    }
 }
 
 impl<'tcx> Visitor<'tcx> for TaskTree {

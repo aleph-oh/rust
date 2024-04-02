@@ -703,26 +703,45 @@ impl<'tcx> GenKillAnalysis<'tcx> for DefinitelyInitializedPlaces<'_, 'tcx> {
         drop_flag_effects_for_location(self.body, self.mdpe, location, |path, s| {
             Self::update_bits(trans, path, s)
         });
+
         if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
             self.state_at_last_locations.insert(location, trans.clone());
         } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
             let task = self.task_tree.expect_task(location);
+            // We want to say that a state is definitely initialized if it is definitely initialized in some synced child.
+            // FIXME(jhilton): this is currently inaccurate because we sync locations that we may not have actually reached
+            // in the case of conditional spawns. We should only sync locations here that we know have actually detached.
+            // We could figure out which locations have actually detached through a separate gen-kill analysis that we only
+            // need for this case, and possibly for borrow-checking. This is a SOUNDNESS problem that we should definitely fix.
             self.task_tree
-                .children_last_locations(task)
-                .filter_map(|location| self.state_at_last_locations.get(&location))
+                .last_locations_by_child(task)
+                .map(|(_task, locations)| {
+                    // HACK(jhilton): this initialization is the exact same as the one in `bottom_value`. That's pretty terrible
+                    // but I don't think a helper function really makes sense, and we can't use `bottom_value` because it expects
+                    // a Body.
+                    let init = lattice::Dual(BitSet::new_filled(self.move_data().move_paths.len()));
+                    let state_exiting_task = locations
+                        .iter()
+                        .filter_map(|location| self.state_at_last_locations.get(location))
+                        .fold(init, |mut acc, state| {
+                            // We use join here because we want to merge flow results from multiple paths in the
+                            // conventional way. For DefinitelyInitialized, that happens to be intersection by
+                            // the definition of the analysis domain, so we're narrowing the set of deifnitely-initialized
+                            // variables.
+                            acc.join(state);
+                            acc
+                        });
+                    state_exiting_task
+                })
                 .for_each(|state| {
-                    // We want to say that a state is definitely initialized if it is definitely initialized in some synced child.
-                    // FIXME(jhilton): this is currently inaccurate because we sync locations that we may not have actually reached
-                    // in the case of conditional spawns. We should only sync locations here that we know have actually detached.
-                    // We could figure out which locations have actually detached through a separate gen-kill analysis that we only
-                    // need for this case. This is a SOUNDNESS problem that we should definitely fix.
-
-                    // Since this lattice has a join operator of intersection and a set bit implies an initialized value, we want
-                    // to use union here. We want to get 'lower' in the lattice so we use meet (which will also be union).
+                    // We use meet here because we need the number of initialized variables to increase at a sync,
+                    // and meet is union for `DefinitelyInitialized`. It also makes sense since we're going down in the
+                    // lattice by using meet, which takes us closer to all variables being initialized.
                     use crate::framework::lattice::MeetSemiLattice;
-                    trans.meet(state);
+                    trans.meet(&state);
                 });
         }
+
         terminator.edges()
     }
 
