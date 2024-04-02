@@ -87,23 +87,20 @@ impl TaskTree {
         self.task(location.block).expect("expected block to have a task!")
     }
 
-    /// Get the last locations of the children of this task.
+    /// Get the last locations of the children of this task, panicking if it doesn't exist.
     pub fn children_last_locations(&self, task: Task) -> impl Iterator<Item = mir::Location> + '_ {
-        self.tasks[task]
-            .children
-            .iter()
-            .flat_map(move |&child| self.tasks[child].last_locations.iter().copied())
+        self.children(task).flat_map(move |child| self.last_locations(child))
     }
 
-    /// Get an iterator over child tasks and their last locations.
-    pub fn last_locations_by_child(
-        &self,
-        task: Task,
-    ) -> impl Iterator<Item = (Task, &[mir::Location])> + '_ {
-        self.tasks[task]
-            .children
-            .iter()
-            .map(|&child| (child, self.tasks[child].last_locations.as_ref()))
+    /// Get the children of this task, panicking if it doesn't exist.
+    pub fn children(&self, task: Task) -> impl Iterator<Item = Task> + '_ {
+        self.tasks[task].children.iter().copied()
+    }
+
+    /// Get the locations where this task may return control to the task its continuation belongs to, panicking if
+    /// the task doesn't exist.
+    pub fn last_locations(&self, task: Task) -> impl Iterator<Item = mir::Location> + '_ {
+        self.tasks[task].last_locations.iter().copied()
     }
 }
 
