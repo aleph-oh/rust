@@ -112,8 +112,6 @@ impl TaskTree {
         // We need to know that all ancestors of a block are visited before the block itself.
         let mut task_tree = Self::new();
         for (block, block_data) in mir::traversal::preorder(body) {
-            let location = Location { block, statement_index: block_data.statements.len() };
-            let terminator = block_data.terminator();
             let current_task = *task_tree.basic_blocks.entry(block).or_insert_with(|| {
                 assert!(
                     task_tree.tasks.is_empty(),
@@ -126,6 +124,9 @@ impl TaskTree {
                 })
             });
 
+            // As per Location's docs, we know that the length of statements is the index of the terminator.
+            let location = Location { block, statement_index: block_data.statements.len() };
+            let terminator = block_data.terminator();
             match terminator.kind {
                 mir::TerminatorKind::Detach { spawned_task, continuation } => {
                     task_tree.label_block(continuation, current_task);
