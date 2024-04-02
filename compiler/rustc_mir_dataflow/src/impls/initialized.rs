@@ -5,6 +5,7 @@ use rustc_middle::ty::{self, TyCtxt};
 
 use crate::elaborate_drops::DropFlagState;
 use crate::framework::SwitchIntEdgeEffects;
+use crate::mark_cilk_tasks::TaskTree;
 use crate::move_paths::{HasMoveData, InitIndex, InitKind, LookupResult, MoveData, MovePathIndex};
 use crate::on_lookup_result_bits;
 use crate::MoveDataParamEnv;
@@ -54,21 +55,13 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
     mdpe: &'a MoveDataParamEnv<'tcx>,
     skip_unreachable_unwind: bool,
     /// Maps basic blocks to the task they are part of.
-    task_tree: mark_cilk_tasks::TaskTree,
+    task_tree: TaskTree,
     /// Maps locations to the state of the dataflow analysis at that location. The locations in this
     /// map are the last locations of tasks.
     state_at_last_locations: rustc_data_structures::fx::FxHashMap<
         Location,
         MaybeReachable<ChunkedBitSet<MovePathIndex>>,
     >,
-}
-
-fn task_tree_of_body<'a, 'tcx>(body: &'a Body<'tcx>) -> mark_cilk_tasks::TaskTree {
-    use rustc_middle::mir::visit::Visitor;
-    let mut task_tree = mark_cilk_tasks::TaskTree::new();
-    task_tree.visit_body(body);
-    task_tree.validate();
-    task_tree
 }
 
 impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
@@ -79,7 +72,7 @@ impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
             body,
             mdpe,
             skip_unreachable_unwind: false,
-            task_tree: task_tree_of_body(body),
+            task_tree: TaskTree::from_body(body),
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
@@ -156,7 +149,7 @@ pub struct MaybeUninitializedPlaces<'a, 'tcx> {
     skip_unreachable_unwind: BitSet<mir::BasicBlock>,
 
     /// See [MaybeInitializedPlaces::task_tree].
-    task_tree: mark_cilk_tasks::TaskTree,
+    task_tree: TaskTree,
     /// See [MaybeInitializedPlaces::state_at_last_locations]
     state_at_last_locations:
         rustc_data_structures::fx::FxHashMap<Location, ChunkedBitSet<MovePathIndex>>,
@@ -171,7 +164,7 @@ impl<'a, 'tcx> MaybeUninitializedPlaces<'a, 'tcx> {
             mdpe,
             mark_inactive_variants_as_uninit: false,
             skip_unreachable_unwind: BitSet::new_empty(body.basic_blocks.len()),
-            task_tree: task_tree_of_body(body),
+            task_tree: TaskTree::from_body(body),
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
@@ -238,7 +231,7 @@ impl<'a, 'tcx> HasMoveData<'tcx> for MaybeUninitializedPlaces<'a, 'tcx> {
 pub struct DefinitelyInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
-    task_tree: mark_cilk_tasks::TaskTree,
+    task_tree: TaskTree,
     state_at_last_locations:
         rustc_data_structures::fx::FxHashMap<Location, lattice::Dual<BitSet<MovePathIndex>>>,
 }
@@ -248,7 +241,7 @@ impl<'a, 'tcx> DefinitelyInitializedPlaces<'a, 'tcx> {
         DefinitelyInitializedPlaces {
             body,
             mdpe,
-            task_tree: task_tree_of_body(body),
+            task_tree: TaskTree::from_body(body),
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
@@ -292,7 +285,7 @@ impl<'a, 'tcx> HasMoveData<'tcx> for DefinitelyInitializedPlaces<'a, 'tcx> {
 pub struct EverInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
-    task_tree: mark_cilk_tasks::TaskTree,
+    task_tree: TaskTree,
     state_at_last_locations:
         rustc_data_structures::fx::FxHashMap<Location, ChunkedBitSet<InitIndex>>,
 }
@@ -302,7 +295,7 @@ impl<'a, 'tcx> EverInitializedPlaces<'a, 'tcx> {
         EverInitializedPlaces {
             body,
             mdpe,
-            task_tree: task_tree_of_body(body),
+            task_tree: TaskTree::from_body(body),
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
