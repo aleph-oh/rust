@@ -42,3 +42,11 @@ impl<T: Idx> WorkQueue<T> {
         }
     }
 }
+
+impl<T: Idx> Extend<T> for WorkQueue<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for element in iter {
+            self.insert(element);
+        }
+    }
+}
