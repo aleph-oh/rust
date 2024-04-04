@@ -1,4 +1,6 @@
 use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::work_queue::WorkQueue;
+use rustc_index::bit_set::BitSet;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{self, BasicBlock, Location};
 
@@ -22,6 +24,46 @@ struct TaskData {
 pub struct TaskTree {
     tasks: IndexVec<Task, TaskData>,
     basic_blocks: FxHashMap<BasicBlock, Task>,
+    unwind_subgraph: BitSet<BasicBlock>,
+    cleanup_blocks: BitSet<BasicBlock>,
+}
+
+fn cleanup_blocks(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
+    let mut cleanup_blocks = BitSet::new_empty(body.basic_blocks.len());
+    for (bb, bb_data) in body.basic_blocks.iter_enumerated() {
+        if bb_data.is_cleanup {
+            cleanup_blocks.insert(bb);
+        }
+    }
+    cleanup_blocks
+}
+
+/// Compute the blocks reachable from blocks labeled as cleanup.
+///
+/// We expect that all basic blocks b in the returned subgraph U
+/// are either cleanup blocks or b.predecessors() is a subset of the nodes of U.
+fn unwind_subgraph(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
+    let mut queue = WorkQueue::with_none(body.basic_blocks.len());
+    queue.extend(
+        body.basic_blocks
+            .iter_enumerated()
+            .filter_map(|(bb, bb_data)| bb_data.is_cleanup.then(|| bb)),
+    );
+    let mut cleanup_blocks = BitSet::new_empty(body.basic_blocks.len());
+
+    // Do a breadth-first search to find all blocks reachable from blocks labeled as cleanup.
+    while let Some(block) = queue.pop() {
+        cleanup_blocks.insert(block);
+        queue.extend(body.basic_blocks[block].terminator().successors());
+    }
+
+    // Check the reachability condition.
+    let predecessors = body.basic_blocks.predecessors();
+    for block in cleanup_blocks.iter().filter(|block| !body.basic_blocks[*block].is_cleanup) {
+        // We now need to know that all predecessors of this block are in the subgraph.
+        assert!(predecessors[block].iter().all(|pred| cleanup_blocks.contains(*pred)));
+    }
+    cleanup_blocks
 }
 
 impl TaskTree {
@@ -30,6 +72,12 @@ impl TaskTree {
     /// This makes sense whenever the block might have been labeled with a task already, but you
     /// should always expect that task to be the same: no basic block should be part of two tasks.
     fn label_block(&mut self, block: BasicBlock, task: Task) {
+        assert!(
+            !self.unwind_subgraph.contains(block),
+            "expected not to label block in unwind subgraph: unwind subgraph is {:?}, block is {:?}",
+            self.unwind_subgraph,
+            block
+        );
         match self.basic_blocks.entry(block) {
             std::collections::hash_map::Entry::Occupied(other_task)
                 if *other_task.get() != task =>
@@ -72,14 +120,6 @@ impl TaskTree {
             "expected exactly 1 orphan task since there should be 1 initially-unlabeled task but found {}!",
             number_of_orphan_tasks
         );
-    }
-
-    /// Create a new TaskTree.
-    pub fn new() -> Self {
-        Self {
-            tasks: IndexVec::new(),
-            basic_blocks: rustc_data_structures::fx::FxHashMap::default(),
-        }
     }
 
     fn task(&self, block: BasicBlock) -> Option<Task> {
@@ -147,37 +187,33 @@ impl TaskTree {
     }
 
     /// Modify this task tree by adding all blocks that the terminator can go to, to the current task.
-    fn add_edges_to_current_task(&mut self, current_task: Task, terminator: &mir::Terminator<'_>) {
-        match terminator.edges() {
-            mir::TerminatorEdges::None => {
-                // No targets, nothing to do
-            }
-            mir::TerminatorEdges::Single(target) => {
+    fn add_successors_to_current_task(
+        &mut self,
+        current_task: Task,
+        terminator: &mir::Terminator<'_>,
+    ) {
+        terminator.successors().for_each(|target| {
+            if !self.cleanup_blocks.contains(target) {
                 self.label_block(target, current_task);
             }
-            mir::TerminatorEdges::Double(target1, target2) => {
-                self.label_block(target1, current_task);
-                self.label_block(target2, current_task);
-            }
-            mir::TerminatorEdges::AssignOnReturn { return_, cleanup, place: _ } => {
-                for target in return_.into_iter().chain(cleanup.into_iter()) {
-                    self.label_block(target, current_task);
-                }
-            }
-            mir::TerminatorEdges::SwitchInt { targets, discr: _ } => {
-                for target in targets.all_targets() {
-                    self.label_block(*target, current_task);
-                }
-            }
-        }
+        });
     }
 
     /// Create a TaskTree from a MIR body.
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         // We use this instead of a visitor because we want to control the iteration order.
         // We need to know that all ancestors of a block are visited before the block itself.
-        let mut task_tree = Self::new();
+        let mut task_tree = Self {
+            tasks: IndexVec::new(),
+            basic_blocks: FxHashMap::default(),
+            unwind_subgraph: unwind_subgraph(body),
+            cleanup_blocks: cleanup_blocks(body),
+        };
         for (block, block_data) in mir::traversal::preorder(body) {
+            if task_tree.unwind_subgraph.contains(block) {
+                continue;
+            }
+
             let current_task = *task_tree.basic_blocks.entry(block).or_insert_with(|| {
                 assert!(
                     task_tree.tasks.is_empty(),
@@ -202,9 +238,10 @@ impl TaskTree {
                 }
                 _ => {
                     // For all other terminators, we want to mark all targets as children of the current task.
-                    // This might have the wrong semantics with panics and unwinding? Hopefully sync insertion
-                    // can make that a nonissue.
-                    task_tree.add_edges_to_current_task(current_task, terminator);
+                    // The correct behavior for panics and unwinding is to avoid marking blocks used during
+                    // unwinding as part of any tasks. We should disallow using spawn and sync in unwinding
+                    // contexts.
+                    task_tree.add_successors_to_current_task(current_task, terminator);
                 }
             }
         }
