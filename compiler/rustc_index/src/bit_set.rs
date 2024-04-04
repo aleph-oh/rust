@@ -677,8 +677,63 @@ impl<T: Idx> BitRelations<ChunkedBitSet<T>> for ChunkedBitSet<T> {
         unimplemented!("implement if/when necessary");
     }
 
-    fn intersect(&mut self, _other: &ChunkedBitSet<T>) -> bool {
-        unimplemented!("implement if/when necessary");
+    fn intersect(&mut self, other: &ChunkedBitSet<T>) -> bool {
+        assert_eq!(self.domain_size, other.domain_size);
+        debug_assert_eq!(self.chunks.len(), other.chunks.len());
+
+        let mut changed = false;
+        for (mut self_chunk, other_chunk) in self.chunks.iter_mut().zip(other.chunks.iter()) {
+            match (&mut self_chunk, &other_chunk) {
+                (_, Ones(_)) | (Zeros(_), _) => {}
+                (Ones(self_chunk_domain_size), Zeros(other_chunk_domain_size))
+                | (Ones(self_chunk_domain_size), Mixed(other_chunk_domain_size, ..))
+                | (Mixed(self_chunk_domain_size, ..), Zeros(other_chunk_domain_size, ..)) => {
+                    // `other_chunk` fully overwrites `self_chunk`
+                    debug_assert_eq!(self_chunk_domain_size, other_chunk_domain_size);
+                    *self_chunk = other_chunk.clone();
+                    changed = true;
+                }
+                (
+                    Mixed(
+                        self_chunk_domain_size,
+                        ref mut self_chunk_count,
+                        ref mut self_chunk_words,
+                    ),
+                    Mixed(other_chunk_domain_size, _other_chunk_count, other_chunk_words),
+                ) => {
+                    debug_assert_eq!(self_chunk_domain_size, other_chunk_domain_size);
+                    // First check if the operation would change
+                    // `self_chunk.words`. If not, we can avoid allocating some
+                    // words, and this happens often enough that it's a
+                    // performance win. Also, we only need to operate on the
+                    // in-use words, hence the slicing.
+                    let op = |a, b| a & b;
+                    let num_words = num_words(*self_chunk_domain_size as usize);
+                    if bitwise_changes(
+                        &self_chunk_words[0..num_words],
+                        &other_chunk_words[0..num_words],
+                        op,
+                    ) {
+                        let self_chunk_words = Rc::make_mut(self_chunk_words);
+                        let has_changed = bitwise(
+                            &mut self_chunk_words[0..num_words],
+                            &other_chunk_words[0..num_words],
+                            op,
+                        );
+                        debug_assert!(has_changed);
+                        *self_chunk_count = self_chunk_words[0..num_words]
+                            .iter()
+                            .map(|w| w.count_ones() as ChunkSize)
+                            .sum();
+                        if *self_chunk_count == *self_chunk_domain_size {
+                            *self_chunk = Ones(*self_chunk_domain_size);
+                        }
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
     }
 }
 
