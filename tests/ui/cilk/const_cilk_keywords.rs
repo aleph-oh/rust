@@ -1,5 +1,5 @@
 // Check what happens when using Cilk keywords in a const context.
-// known-bug: unknown
+// build-pass
 
 const fn fib(n: usize) -> usize {
     if n <= 1 {
