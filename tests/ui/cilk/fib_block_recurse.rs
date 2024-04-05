@@ -1,6 +1,6 @@
 #![feature(cilk)]
 // Checks that a simple Cilk program compiles.
-// known-bug: unknown
+// build-pass
 
 fn fib(n: usize) -> usize {
     if n <= 1 {
