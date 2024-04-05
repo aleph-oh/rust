@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Tests that compilation fails when a value is returned from a spawned block before
 // a sync runs.
 

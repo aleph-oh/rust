@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Check what happens when using Cilk keywords in a const context.
 // build-pass
 

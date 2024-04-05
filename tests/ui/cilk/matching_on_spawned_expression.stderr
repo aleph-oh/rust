@@ -1,5 +1,5 @@
 error[E0381]: used binding `x` is possibly-uninitialized
-  --> $DIR/matching_on_spawned_expression.rs:5:11
+  --> $DIR/matching_on_spawned_expression.rs:6:11
    |
 LL |     let x: Option<usize> = cilk_spawn { None };
    |         -                             -------- binding initialized here in some conditions

@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Checks that a simple Cilk program compiles.
 // build-pass
 

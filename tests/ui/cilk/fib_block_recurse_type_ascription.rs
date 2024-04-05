@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Checks that a simple Cilk program compiles, with type ascription.
 // build-pass
 

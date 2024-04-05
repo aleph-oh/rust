@@ -1939,7 +1939,7 @@ impl<'a> Parser<'a> {
     fn parse_expr_cilk_sync(&mut self) -> PResult<'a, P<Expr>> {
         let lo = self.prev_token.span;
         let kind = ExprKind::CilkSync;
-        // FIXME(jhilton): we want to add feature gating to this after we get it to minimally work.
+        self.sess.gated_spans.gate(sym::cilk, lo.to(self.prev_token.span));
         Ok(self.mk_expr(lo.to(self.prev_token.span), kind))
     }
 
@@ -3422,6 +3422,7 @@ impl<'a> Parser<'a> {
             err
         })?;
         let kind = ExprKind::CilkSpawn(body);
+        self.sess.gated_spans.gate(sym::cilk, lo.to(self.prev_token.span));
         Ok(self.mk_expr_with_attrs(lo.to(self.prev_token.span), kind, attrs))
     }
 

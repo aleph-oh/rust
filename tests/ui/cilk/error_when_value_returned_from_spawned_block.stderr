@@ -1,5 +1,5 @@
 error[E0381]: used binding `y` is possibly-uninitialized
-  --> $DIR/error_when_value_returned_from_spawned_block.rs:7:9
+  --> $DIR/error_when_value_returned_from_spawned_block.rs:8:9
    |
 LL |         let y = cilk_spawn { 1 };
    |             -              ----- binding initialized here in some conditions

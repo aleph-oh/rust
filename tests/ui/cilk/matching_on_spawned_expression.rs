@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Tests that matching on a spawned expression gives an error.
 
 fn main() {

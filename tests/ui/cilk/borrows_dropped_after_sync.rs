@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Tests that borrows are not live after the cilk_sync point.
 // build-pass
 

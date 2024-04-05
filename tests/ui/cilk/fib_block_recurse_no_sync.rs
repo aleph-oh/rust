@@ -1,3 +1,4 @@
+#![feature(cilk)]
 // Checks that a cilk program without a sync reports an uninitialized variable error.
 
 fn fib(n: usize) -> usize {
