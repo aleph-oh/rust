@@ -566,9 +566,16 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     self.storage_live_binding(block, var, irrefutable_pat.span, OutsideGuard, true);
                 unpack!(block = self.expr_into_dest(place, block, initializer_id));
 
-                // Inject a fake read, see comments on `FakeReadCause::ForLet`.
-                let source_info = self.source_info(irrefutable_pat.span);
-                self.cfg.push_fake_read(block, source_info, FakeReadCause::ForLet(None), place);
+                let should_inject_fake_read = matches!(
+                    self.thir[initializer_id],
+                    Expr { kind: ExprKind::CilkSpawn { .. }, .. }
+                );
+
+                if should_inject_fake_read {
+                    // Inject a fake read, see comments on `FakeReadCause::ForLet`.
+                    let source_info = self.source_info(irrefutable_pat.span);
+                    self.cfg.push_fake_read(block, source_info, FakeReadCause::ForLet(None), place);
+                }
 
                 self.schedule_drop_for_binding(var, irrefutable_pat.span, OutsideGuard);
                 block.unit()
