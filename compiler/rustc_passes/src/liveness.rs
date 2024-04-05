@@ -417,7 +417,9 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
                 self.add_live_node_for_node(expr.hir_id, ExprNode(expr.span, expr.hir_id));
             }
 
-            // FIXME(jhilton): we have to do a more sophisticated analysis using spawn and sync here.
+            // NOTE(jhilton): we don't do anything interesting with spawn and sync for liveness because
+            // liveness propagates through the AST in a non-dataflowy way, so we don't get errors about
+            // liveness from the AST pass.
 
             // otherwise, live nodes are not required:
             hir::ExprKind::Index(..)
