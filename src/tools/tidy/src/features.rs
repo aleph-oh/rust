@@ -412,7 +412,10 @@ fn collect_lang_features_in(features: &mut Features, base: &Path, file: &str, ba
 
         let issue_str = parts.next().unwrap().trim();
         let tracking_issue = if issue_str.starts_with("None") {
-            if level == Status::Unstable && !next_feature_omits_tracking_issue {
+            // NOTE(jhilton): we allow Cilk to not have a tracking issue since although it's an
+            // unstable feature, progress on it isn't in the main Rust repo so there isn't a
+            // reasonable tracking issue to point to.
+            if level == Status::Unstable && !next_feature_omits_tracking_issue && name != "cilk" {
                 tidy_error!(
                     bad,
                     "{}:{}: no tracking issue for feature {}",
