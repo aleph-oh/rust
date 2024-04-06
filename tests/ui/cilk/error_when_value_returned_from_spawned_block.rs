@@ -3,7 +3,7 @@
 // a sync runs.
 
 fn main() {
-    let x = { 
+    let x = {
         let y = cilk_spawn { 1 };
         y
 //~^ ERROR: used binding `y` is possibly-uninitialized [E0381]
