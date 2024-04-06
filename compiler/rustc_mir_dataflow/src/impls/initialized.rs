@@ -426,7 +426,7 @@ impl<'tcx> GenKillAnalysis<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
             // We skip the locations that don't exist because a task can have children which aren't synced at this point in the dataflow analysis, since
             // they can be successors of this sync. This is because tasks don't end on sync.
             self.task_tree
-                .children_last_locations(task)
+                .descendant_last_locations(task)
                 .filter_map(|last_location| {
                     self.state_at_last_locations.get(&last_location).cloned()
                 })
@@ -563,7 +563,7 @@ impl<'tcx> GenKillAnalysis<'tcx> for MaybeUninitializedPlaces<'_, 'tcx> {
             let task = self.task_tree.expect_task(location);
             // See the comment in `MaybeInitializedPlaces::terminator_effect` for why we skip locations that have no state.
             self.task_tree
-                .children_last_locations(task)
+                .descendant_last_locations(task)
                 .filter_map(|location| self.state_at_last_locations.get(&location))
                 .for_each(|state| {
                     use crate::lattice::MeetSemiLattice;
@@ -843,7 +843,7 @@ impl<'tcx> GenKillAnalysis<'tcx> for EverInitializedPlaces<'_, 'tcx> {
         } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
             let task = self.task_tree.expect_task(location);
             self.task_tree
-                .children_last_locations(task)
+                .descendant_last_locations(task)
                 .filter_map(|location| self.state_at_last_locations.get(&location))
                 .for_each(|state| {
                     // This lattice has all-uninitialized as the bottom and the join operator adds

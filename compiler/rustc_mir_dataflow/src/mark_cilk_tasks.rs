@@ -131,9 +131,13 @@ impl TaskTree {
         self.task(location.block).expect("expected block to have a task!")
     }
 
-    /// Get the last locations of the children of this task, panicking if it doesn't exist.
-    pub fn children_last_locations(&self, task: Task) -> impl Iterator<Item = Location> + '_ {
-        self.children(task).flat_map(move |child| self.last_locations(child))
+    /// Get the last locations of any task that is a descendant of this task, panicking if it doesn't exist.
+    ///
+    /// We return a boxed iterator because it's fairly hard to make a recursive iterator.
+    pub fn descendant_last_locations(&self, task: Task) -> Box<dyn Iterator<Item = Location> + '_> {
+        Box::new(self.children(task).flat_map(move |child| {
+            self.last_locations(child).chain(self.descendant_last_locations(child))
+        }))
     }
 
     /// Get the children of this task, panicking if it doesn't exist.
