@@ -1482,9 +1482,7 @@ impl<'a> Parser<'a> {
                     },
                 )
             } else if this.eat_keyword(kw::CilkSpawn) {
-                // FIXME(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
-                // fine to require all cilk exprs to be in a block I think.
-                this.parse_cilk_spawn_block()
+                this.parse_cilk_spawn()
             } else if this.check_inline_const(0) {
                 this.parse_const_block(lo.to(this.token.span), false)
             } else if this.may_recover() && this.is_do_catch_block() {
@@ -3415,15 +3413,21 @@ impl<'a> Parser<'a> {
             )
     }
 
-    fn parse_cilk_spawn_block(&mut self) -> PResult<'a, P<Expr>> {
-        let lo = self.token.span;
+    /// Parses the expression in cilk_spawn <expr>. Precondition: cilk_spawn already eaten.
+    fn parse_cilk_spawn(&mut self) -> PResult<'a, P<Expr>> {
+        let spawn_span = self.prev_token.span;
+        self.sess.gated_spans.gate(sym::cilk, spawn_span);
+        // FIXME(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
+        // fine to require all cilk exprs to be in a block I think. We can use parse_expr directly here, or parse_expr_res if there
+        // are restrictions we care about.
         let (attrs, body) = self.parse_inner_attrs_and_block().map_err(|mut err| {
-            err.span_label(lo, "while parsing this `cilk_spawn` expression");
+            err.span_label(spawn_span, "while parsing this `cilk_spawn` expression");
             err
         })?;
+        let body_span = body.span;
         let kind = ExprKind::CilkSpawn(body);
-        self.sess.gated_spans.gate(sym::cilk, lo.to(self.prev_token.span));
-        Ok(self.mk_expr_with_attrs(lo.to(self.prev_token.span), kind, attrs))
+        // The returned expression should be from the spawn token to the end of the block.
+        Ok(self.mk_expr_with_attrs(body_span.to(self.prev_token.span), kind, attrs))
     }
 
     fn maybe_parse_struct_expr(
