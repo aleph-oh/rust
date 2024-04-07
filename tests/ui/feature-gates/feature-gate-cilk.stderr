@@ -1,8 +1,8 @@
 error[E0658]: cilk keywords are experimental
-  --> $DIR/feature-gate-cilk.rs:2:16
+  --> $DIR/feature-gate-cilk.rs:2:5
    |
 LL |     cilk_spawn { 5 };
-   |                ^^^^^
+   |     ^^^^^^^^^^
    |
    = help: add `#![feature(cilk)]` to the crate attributes to enable
    = note: this compiler was built on YYYY-MM-DD; consider upgrading it if it is out of date
