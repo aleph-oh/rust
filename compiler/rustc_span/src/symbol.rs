@@ -1637,6 +1637,7 @@ symbols! {
         suggestion,
         sym,
         sync,
+        sync_region_start,
         t32,
         target,
         target_abi,
