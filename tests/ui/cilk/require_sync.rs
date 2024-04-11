@@ -2,9 +2,9 @@
 // Tests that values used in a spawned block must be Sync since they can be accessed in parallel.
 
 // known-bug: unknown
-//@ build-pass
-//@ compile-flags: -C panic=abort
-//@ no-prefer-dynamic
+// build-pass
+// compile-flags: -C panic=abort
+// no-prefer-dynamic
 
 use std::cell::RefCell;
 use std::rc::Rc;
