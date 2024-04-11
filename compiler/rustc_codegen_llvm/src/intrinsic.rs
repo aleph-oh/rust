@@ -73,6 +73,8 @@ fn get_simple_intrinsic<'ll>(
         sym::ptr_mask => "llvm.ptrmask",
         sym::roundevenf32 => "llvm.roundeven.f32",
         sym::roundevenf64 => "llvm.roundeven.f64",
+        // We need sync regions to generate Tapir IR.
+        sym::sync_region_start => "llvm.syncregion.start",
         _ => return None,
     };
     Some(cx.get_intrinsic(llvm_name))
@@ -449,6 +451,10 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
 
     fn va_end(&mut self, va_list: &'ll Value) -> &'ll Value {
         self.call_intrinsic("llvm.va_end", &[va_list])
+    }
+
+    fn sync_region_start(&mut self) -> Self::Value {
+        self.call_intrinsic("llvm.syncregion.start", &[])
     }
 }
 
