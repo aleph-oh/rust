@@ -1,8 +1,10 @@
 #![feature(cilk)]
 // Tests that values used in a spawned block must be Sync since they can be accessed in parallel.
-// build-pass
+
 // known-bug: unknown
-// compile-flags: -C panic=abort
+//@ build-pass
+//@ compile-flags: -C panic=abort
+//@ no-prefer-dynamic
 
 use std::cell::RefCell;
 use std::rc::Rc;
