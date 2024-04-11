@@ -1131,6 +1131,16 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mergeable_succ,
         )
     }
+
+    fn sync_region(&self) -> Bx::Value {
+        self.try_sync_region().unwrap_or_else(|| {
+            bug!("expected to have sync region!");
+        })
+    }
+
+    fn try_sync_region(&self) -> Option<Bx::Value> {
+        self.sync_region
+    }
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
@@ -1297,20 +1307,33 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 mergeable_succ(),
             ),
 
-            // FIXME(jhilton): all this codegen is just to no-ops. Change this later :)
-            mir::TerminatorKind::Detach { spawned_task, continuation: _ } => {
-                let target = self.llbb(spawned_task);
-                bx.br(target);
+            // FIXME(jhilton): for backends that don't support Tapir, we can merge successors.
+            mir::TerminatorKind::Detach { spawned_task, continuation } => {
+                let spawned_task = self.llbb(spawned_task);
+                if Bx::supports_tapir() {
+                    let continuation = self.llbb(continuation);
+                    bx.detach(spawned_task, continuation, self.sync_region());
+                } else {
+                    bx.br(spawned_task);
+                }
                 MergingSucc::False
             }
             mir::TerminatorKind::Reattach { continuation } => {
-                let target = self.llbb(continuation);
-                bx.br(target);
+                let continuation = self.llbb(continuation);
+                if Bx::supports_tapir() {
+                    bx.reattach(continuation, self.sync_region());
+                } else {
+                    bx.br(continuation);
+                }
                 MergingSucc::False
             }
             mir::TerminatorKind::Sync { target } => {
                 let target = self.llbb(target);
-                bx.br(target);
+                if Bx::supports_tapir() {
+                    bx.sync(target, self.sync_region());
+                } else {
+                    bx.br(target);
+                }
                 MergingSucc::False
             }
         }
