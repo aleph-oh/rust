@@ -45,6 +45,12 @@ impl Drop for Builder<'_, '_, '_> {
     }
 }
 
+impl MaybeSupportsTapir for Builder<'_, '_, '_> {
+    fn supports_tapir() -> bool {
+        true
+    }
+}
+
 /// Empty string, to be used where LLVM expects an instruction name, indicating
 /// that the instruction is to be left unnamed (i.e. numbered, in textual IR).
 // FIXME(eddyb) pass `&CStr` directly to FFI once it's a thin pointer.
@@ -265,6 +271,29 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     fn unreachable(&mut self) {
         unsafe {
             llvm::LLVMBuildUnreachable(self.llbuilder);
+        }
+    }
+
+    fn detach(
+        &mut self,
+        task: &'ll BasicBlock,
+        continuation: &'ll BasicBlock,
+        sync_region: &'ll Value,
+    ) {
+        unsafe {
+            llvm::LLVMBuildDetach(self.llbuilder, task, continuation, sync_region);
+        }
+    }
+
+    fn reattach(&mut self, continuation: &'ll BasicBlock, sync_region: &'ll Value) {
+        unsafe {
+            llvm::LLVMBuildReattach(self.llbuilder, continuation, sync_region);
+        }
+    }
+
+    fn sync(&mut self, target: &'ll BasicBlock, sync_region: &'ll Value) {
+        unsafe {
+            llvm::LLVMBuildSync(self.llbuilder, target, sync_region);
         }
     }
 

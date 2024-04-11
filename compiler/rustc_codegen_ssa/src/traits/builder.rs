@@ -5,7 +5,7 @@ use super::debuginfo::DebugInfoBuilderMethods;
 use super::intrinsic::IntrinsicCallMethods;
 use super::misc::MiscMethods;
 use super::type_::{ArgAbiMethods, BaseTypeMethods};
-use super::{HasCodegen, StaticBuilderMethods};
+use super::{HasCodegen, MaybeSupportsTapir, StaticBuilderMethods};
 
 use crate::common::{
     AtomicOrdering, AtomicRmwBinOp, IntPredicate, RealPredicate, SynchronizationScope, TypeKind,
@@ -40,6 +40,7 @@ pub trait BuilderMethods<'a, 'tcx>:
     + StaticBuilderMethods
     + HasParamEnv<'tcx>
     + HasTargetSpec
+    + MaybeSupportsTapir
 {
     fn build(cx: &'a Self::CodegenCx, llbb: Self::BasicBlock) -> Self;
 
@@ -82,6 +83,14 @@ pub trait BuilderMethods<'a, 'tcx>:
         funclet: Option<&Self::Funclet>,
     ) -> Self::Value;
     fn unreachable(&mut self);
+    fn detach(
+        &mut self,
+        task_llbb: Self::BasicBlock,
+        continuation_llbb: Self::BasicBlock,
+        sync_region: Self::Value,
+    );
+    fn reattach(&mut self, continuation_llbb: Self::BasicBlock, sync_region: Self::Value);
+    fn sync(&mut self, target_llbb: Self::BasicBlock, sync_region: Self::Value);
 
     fn add(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
     fn fadd(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
