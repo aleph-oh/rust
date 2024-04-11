@@ -1063,6 +1063,23 @@ extern "C" {
     ) -> &'a Value;
     pub fn LLVMBuildResume<'a>(B: &Builder<'a>, Exn: &'a Value) -> &'a Value;
     pub fn LLVMBuildUnreachable<'a>(B: &Builder<'a>) -> &'a Value;
+    // Tapir terminators.
+    pub fn LLVMBuildDetach<'a>(
+        B: &Builder<'a>,
+        Task: &'a BasicBlock,
+        Continuation: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
+    pub fn LLVMBuildReattach<'a>(
+        B: &Builder<'a>,
+        Continuation: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
+    pub fn LLVMBuildSync<'a>(
+        B: &Builder<'a>,
+        Target: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
 
     pub fn LLVMBuildCleanupPad<'a>(
         B: &Builder<'a>,
