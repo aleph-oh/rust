@@ -2,6 +2,7 @@
 // Tests that borrows are still live before a cilk_sync.
 // build-pass
 // known-bug: unknown
+// compile-flags: -C panic=abort
 
 // This should be rejected since s is still referenced by the spawned block
 // and there's no sync to indicate that the borrow can be dropped.
