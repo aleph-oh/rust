@@ -1,7 +1,9 @@
 #![feature(cilk)]
 // Check what happens when using Cilk keywords in a const context.
-// build-pass
-// compile-flags: -C panic=abort
+
+//@ build-pass
+//@ compile-flags: -C panic=abort
+//@ no-prefer-dynamic
 
 const fn fib(n: usize) -> usize {
     if n <= 1 {
