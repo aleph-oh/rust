@@ -647,6 +647,8 @@ pub(crate) fn link(
     Ok(modules.remove(0))
 }
 
+// TODO(jhilton): we're going to need to grab the OpenCilk ABI here and link it! 
+
 pub(crate) unsafe fn codegen(
     cgcx: &CodegenContext<LlvmCodegenBackend>,
     dcx: &DiagCtxt,
