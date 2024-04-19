@@ -647,7 +647,7 @@ pub(crate) fn link(
     Ok(modules.remove(0))
 }
 
-// TODO(jhilton): we're going to need to grab the OpenCilk ABI here and link it! 
+// FIXME(jhilton): we may need to manually link the ABI here, but I don't think we should have to b/c of setting TLII in PassWrapper.
 
 pub(crate) unsafe fn codegen(
     cgcx: &CodegenContext<LlvmCodegenBackend>,
