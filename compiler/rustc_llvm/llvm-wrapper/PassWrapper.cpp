@@ -532,12 +532,23 @@ extern "C" void LLVMRustDisposeTargetMachine(LLVMTargetMachineRef TM) {
   delete unwrap(TM);
 }
 
+// FIXME(jhilton): don't hardcode this!
+const StringRef OPENCILK_ABI_PATH =
+    "~/Code/MEng/opencilk/opencilk-project/build/lib/clang/17/lib/darwin/libopencilk-abi_osx.bc";
+
+void addTapirOptions(TargetLibraryInfoImpl &TLII)
+{
+  TLII.setTapirTarget(TapirTargetID::OpenCilk);
+  TLII.setTapirTargetOptions(std::make_unique<OpenCilkABIOptions>(OPENCILK_ABI_PATH));
+}
+
 // Unfortunately, the LLVM C API doesn't provide a way to create the
 // TargetLibraryInfo pass, so we use this method to do so.
 extern "C" void LLVMRustAddLibraryInfo(LLVMPassManagerRef PMR, LLVMModuleRef M,
                                        bool DisableSimplifyLibCalls) {
   Triple TargetTriple(unwrap(M)->getTargetTriple());
   TargetLibraryInfoImpl TLII(TargetTriple);
+  addTapirOptions(TLII);
   if (DisableSimplifyLibCalls)
     TLII.disableAllFunctions();
   unwrap(PMR)->add(new TargetLibraryInfoWrapperPass(TLII));
@@ -818,7 +829,7 @@ LLVMRustOptimize(
 
   Triple TargetTriple(TheModule->getTargetTriple());
   std::unique_ptr<TargetLibraryInfoImpl> TLII(new TargetLibraryInfoImpl(TargetTriple));
-  // TODO(jhilton): specify OpenCilk ABI path here? I think we only want to do this if there's LTO, but I'm not sure.
+  addTapirOptions(*TLII);
   if (DisableSimplifyLibCalls)
     TLII->disableAllFunctions();
   FAM.registerPass([&] { return TargetLibraryAnalysis(*TLII); });
