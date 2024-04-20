@@ -534,7 +534,7 @@ extern "C" void LLVMRustDisposeTargetMachine(LLVMTargetMachineRef TM) {
 
 // FIXME(jhilton): don't hardcode this!
 const StringRef OPENCILK_ABI_PATH =
-    "~/Code/MEng/opencilk/opencilk-project/build/lib/clang/17/lib/darwin/libopencilk-abi_osx.bc";
+    "/Users/jay/Code/MEng/opencilk/build/lib/clang/17/lib/darwin/libopencilk-abi_osx.bc";
 
 void addTapirOptions(TargetLibraryInfoImpl &TLII)
 {
@@ -946,6 +946,7 @@ LLVMRustOptimize(
 
   ModulePassManager MPM;
   bool NeedThinLTOBufferPasses = UseThinLTOBuffers;
+  bool const LowerTapir = TLII->hasTapirTarget();
   if (!NoPrepopulatePasses) {
     // The pre-link pipelines don't support O0 and require using buildO0DefaultPipeline() instead.
     // At the same time, the LTO pipelines do support O0 and using them is required.
@@ -957,7 +958,7 @@ LLVMRustOptimize(
         PB.registerOptimizerLastEPCallback(C);
 
       // Pass false as we manually schedule ThinLTOBufferPasses below.
-      MPM = PB.buildO0DefaultPipeline(OptLevel, /* PreLinkLTO */ false);
+      MPM = PB.buildO0DefaultPipeline(OptLevel, /* PreLinkLTO */ false, LowerTapir);
     } else {
       for (const auto &C : PipelineStartEPCallbacks)
         PB.registerPipelineStartEPCallback(C);
@@ -966,7 +967,7 @@ LLVMRustOptimize(
 
       switch (OptStage) {
       case LLVMRustOptStage::PreLinkNoLTO:
-        MPM = PB.buildPerModuleDefaultPipeline(OptLevel, DebugPassManager);
+        MPM = PB.buildPerModuleDefaultPipeline(OptLevel, DebugPassManager, LowerTapir);
         break;
       case LLVMRustOptStage::PreLinkThinLTO:
         MPM = PB.buildThinLTOPreLinkDefaultPipeline(OptLevel);
@@ -979,10 +980,10 @@ LLVMRustOptimize(
       case LLVMRustOptStage::ThinLTO:
         // FIXME: Does it make sense to pass the ModuleSummaryIndex?
         // It only seems to be needed for C++ specific optimizations.
-        MPM = PB.buildThinLTODefaultPipeline(OptLevel, nullptr);
+        MPM = PB.buildThinLTODefaultPipeline(OptLevel, nullptr, LowerTapir);
         break;
       case LLVMRustOptStage::FatLTO:
-        MPM = PB.buildLTODefaultPipeline(OptLevel, nullptr);
+        MPM = PB.buildLTODefaultPipeline(OptLevel, nullptr, LowerTapir);
         break;
       }
     }
