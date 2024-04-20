@@ -1,7 +1,7 @@
 #![feature(cilk)]
 // Checks that a simple Cilk program compiles, with type ascription.
 
-// build-pass
+// run-pass
 // compile-flags: -C panic=abort
 // no-prefer-dynamic
 
@@ -15,4 +15,8 @@ fn fib(n: usize) -> usize {
     x + y
 }
 
-fn main() {}
+fn main() {
+    let n = 10;
+    let result = fib(n);
+    assert_eq!(result, 55);
+}
