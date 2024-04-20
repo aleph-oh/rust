@@ -16,6 +16,7 @@ pub fn target() -> Target {
         "-L".into(),
         "/Users/jay/Code/MEng/opencilk/build/lib/clang/17/lib/darwin".into(),
         "-lopencilk_osx_dynamic".into(),
+        "-Wl,-rpath,/Users/jay/Code/MEng/opencilk/build/lib/clang/17/lib/darwin".into(),
     ];
     late_link_args.insert(LinkerFlavor::Darwin(Cc::Yes, Lld::No), args_to_link_opencilk.clone());
     Target {
