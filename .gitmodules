@@ -43,3 +43,4 @@
 	url = https://github.com/OpenCilk/opencilk-project.git
     branch = dev/17.x
     shallow = true
+	ignore = dirty
