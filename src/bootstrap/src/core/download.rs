@@ -194,7 +194,13 @@ impl Config {
         let _ = try_run(self, patchelf.arg(fname));
     }
 
-    fn download_file(&self, url: &str, dest_path: &Path, help_on_error: &str) {
+    fn download_file(
+        &self,
+        url: &str,
+        dest_path: &Path,
+        help_on_error: &str,
+        follow_redirects: bool,
+    ) {
         self.verbose(&format!("download {url}"));
         // Use a temporary file in case we crash while downloading, to avoid a corrupt download in cache/.
         let tempfile = self.tempdir().join(dest_path.file_name().unwrap());
@@ -203,7 +209,7 @@ impl Config {
         // protocols without worrying about merge conflicts if we change the HTTP implementation.
         match url.split_once("://").map(|(proto, _)| proto) {
             Some("http") | Some("https") => {
-                self.download_http_with_retries(&tempfile, url, help_on_error)
+                self.download_http_with_retries(&tempfile, url, help_on_error, follow_redirects)
             }
             Some(other) => panic!("unsupported protocol {other} in {url}"),
             None => panic!("no protocol in {url}"),
@@ -214,7 +220,13 @@ impl Config {
         );
     }
 
-    fn download_http_with_retries(&self, tempfile: &Path, url: &str, help_on_error: &str) {
+    fn download_http_with_retries(
+        &self,
+        tempfile: &Path,
+        url: &str,
+        help_on_error: &str,
+        follow_redirects: bool,
+    ) {
         println!("downloading {url}");
         // Try curl. If that fails and we are on windows, fallback to PowerShell.
         let mut curl = Command::new("curl");
@@ -236,6 +248,9 @@ impl Config {
             curl.arg("-s");
         } else {
             curl.arg("--progress-bar");
+        }
+        if follow_redirects {
+            curl.arg("-L");
         }
         curl.arg(url);
         if !self.check_run(&mut curl) {
@@ -263,7 +278,32 @@ impl Config {
         }
     }
 
-    fn unpack(&self, tarball: &Path, dst: &Path, pattern: &str) {
+    fn unpack_gzip(&self, tarball: &Path, dst: &Path, prefix: &Path) {
+        eprintln!("gzip: extracting {} to {}", tarball.display(), dst.display());
+        if !dst.exists() {
+            t!(fs::create_dir_all(dst));
+        }
+
+        // decompress the file
+        let data = t!(File::open(tarball), format!("file {} not found", tarball.display()));
+        let decompressor = flate2::bufread::GzDecoder::new(BufReader::new(data));
+
+        let mut tar = tar::Archive::new(decompressor);
+
+        let entries = t!(tar.entries());
+        entries.filter_map(|e| e.ok()).for_each(|mut entry| {
+            let entry_path = t!(entry.path());
+            if !entry_path.starts_with(prefix) {
+                return;
+            }
+
+            let path = entry_path.strip_prefix(prefix).unwrap().to_owned();
+            let dst = dst.join(&path);
+            t!(entry.unpack(dst));
+        })
+    }
+
+    fn unpack_xz(&self, tarball: &Path, dst: &Path, pattern: &str) {
         eprintln!("extracting {} to {}", tarball.display(), dst.display());
         if !dst.exists() {
             t!(fs::create_dir_all(dst));
@@ -619,7 +659,7 @@ impl Config {
             let sha256 = self.stage0_metadata.checksums_sha256.get(&url).expect(&error);
             if tarball.exists() {
                 if self.verify(&tarball, sha256) {
-                    self.unpack(&tarball, &bin_root, prefix);
+                    self.unpack_xz(&tarball, &bin_root, prefix);
                     return;
                 } else {
                     self.verbose(&format!(
@@ -631,7 +671,7 @@ impl Config {
             }
             Some(sha256)
         } else if tarball.exists() {
-            self.unpack(&tarball, &bin_root, prefix);
+            self.unpack_xz(&tarball, &bin_root, prefix);
             return;
         } else {
             None
@@ -648,14 +688,14 @@ HELP: if trying to compile an old commit of rustc, disable `download-rustc` in c
 download-rustc = false
 ";
         }
-        self.download_file(&format!("{base_url}/{url}"), &tarball, help_on_error);
+        self.download_file(&format!("{base_url}/{url}"), &tarball, help_on_error, false);
         if let Some(sha256) = checksum {
             if !self.verify(&tarball, sha256) {
                 panic!("failed to verify {}", tarball.display());
             }
         }
 
-        self.unpack(&tarball, &bin_root, prefix);
+        self.unpack_xz(&tarball, &bin_root, prefix);
     }
 
     pub(crate) fn maybe_download_ci_llvm(&self) {
@@ -728,9 +768,63 @@ download-rustc = false
     [llvm]
     download-ci-llvm = false
     ";
-            self.download_file(&format!("{base}/{llvm_sha}/{filename}"), &tarball, help_on_error);
+            self.download_file(
+                &format!("{base}/{llvm_sha}/{filename}"),
+                &tarball,
+                help_on_error,
+                false,
+            );
         }
         let llvm_root = self.ci_llvm_root();
-        self.unpack(&tarball, &llvm_root, "rust-dev");
+        self.unpack_xz(&tarball, &llvm_root, "rust-dev");
+    }
+
+    // FIXME(jhilton): I think we shouldn't care about this as long as our runtime file detection is relative to llvm-config.
+    // In that case, we still don't redownload to avoid the extra download. Update the docs when runtime file detection is fixed.
+    // Alternatively, we might not need these methods because if it's already in the cache, we're only saving the time to
+    // unpack the tarballs.
+
+    pub(crate) fn maybe_download_opencilk_runtime(&self) {
+        let url = "https://github.com/OpenCilk/cheetah/archive/dev/17.x.tar.gz";
+        let destination = Path::new("src/llvm-project/cheetah");
+        self.maybe_download_opencilk_component(url, destination, Path::new("cheetah-dev"));
+    }
+
+    pub(crate) fn maybe_download_cilktools(&self) {
+        let url = "https://github.com/OpenCilk/productivity-tools/archive/dev/17.x.tar.gz";
+        let destination = Path::new("src/llvm-project/cilktools");
+        self.maybe_download_opencilk_component(
+            url,
+            destination,
+            Path::new("productivity-tools-dev"),
+        );
+    }
+
+    fn maybe_download_opencilk_component(&self, url: &str, destination: &Path, prefix: &Path) {
+        if destination.exists() {
+            return;
+        }
+
+        self.download_opencilk_component(url, destination, prefix);
+    }
+
+    fn download_opencilk_component(&self, url: &str, destination: &Path, prefix: &Path) {
+        if self.dry_run() {
+            return;
+        }
+
+        let file_name = destination.file_name().unwrap();
+        let cache_prefix = format!("opencilk");
+        let cache_dst = self.out.join("cache");
+        let rustc_cache = cache_dst.join(cache_prefix);
+        if !rustc_cache.exists() {
+            t!(fs::create_dir_all(&rustc_cache));
+        }
+        let tarball = rustc_cache.join(&file_name);
+        if !tarball.exists() {
+            self.download_file(url, &tarball, "", true);
+        }
+        // Now the component is at tarball, we have to unpack it into the destination.
+        self.unpack_gzip(&tarball, &destination, prefix);
     }
 }
