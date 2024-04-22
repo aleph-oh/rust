@@ -1750,7 +1750,13 @@ impl Config {
             config.llvm_use_linker = use_linker.clone();
             config.llvm_allow_old_toolchain = allow_old_toolchain.unwrap_or(false);
             config.llvm_polly = polly.unwrap_or(false);
-            config.llvm_clang = clang.unwrap_or(false);
+            // We always want to build Clang, regardless of where our LLVM came from. This is because we'll
+            // always need to build Clang to build the runtimes and cilktools, and our default LLVM will now
+            // include that.
+            // HACK(jhilton): this doesn't really make sense unless the targeted LLVM is the same LLVM as the
+            // ony we bootstrap with, so if that assumption is ever not true, then we may want to build without
+            // clang.
+            config.llvm_clang = true;
             config.llvm_enable_warnings = enable_warnings.unwrap_or(false);
             config.llvm_build_config = build_config.clone().unwrap_or(Default::default());
 

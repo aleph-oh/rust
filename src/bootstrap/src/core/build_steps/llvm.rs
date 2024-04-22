@@ -423,7 +423,8 @@ impl Step for Llvm {
             cfg.define("LLVM_BUILD_32_BITS", "ON");
         }
 
-        // TODO(jhilton): we should also build the OpenCilk runtime.
+        // We also want to build the cheetah and cilktools runtimes to get the right ABI files.
+        cfg.define("LLVM_ENABLE_RUNTIMES", "cheetah;cilktools");
 
         let mut enabled_llvm_projects = Vec::new();
 
