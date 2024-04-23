@@ -532,14 +532,24 @@ extern "C" void LLVMRustDisposeTargetMachine(LLVMTargetMachineRef TM) {
   delete unwrap(TM);
 }
 
-// FIXME(jhilton): don't hardcode this!
-const StringRef OPENCILK_ABI_PATH =
-    "/Users/jay/Code/MEng/opencilk/build/lib/clang/17/lib/darwin/libopencilk-abi_osx.bc";
+// Read the environment variable OPENCILK_ABI_PATH to get the path to the OpenCilk ABI for
+// this target.
+// FIXME(jhilton): we should detect this for the given architecture and search in specified directories
+// instead.
+StringRef FindOpenCilkABIBitCodeFilePath()
+{
+  const char *ABIPath = getenv("OPENCILK_ABI_PATH");
+  if (!ABIPath)
+  {
+    report_fatal_error("OPENCILK_ABI_PATH environment variable not set");
+  }
+  return ABIPath;
+}
 
 void addTapirOptions(TargetLibraryInfoImpl &TLII)
 {
   TLII.setTapirTarget(TapirTargetID::OpenCilk);
-  TLII.setTapirTargetOptions(std::make_unique<OpenCilkABIOptions>(OPENCILK_ABI_PATH));
+  TLII.setTapirTargetOptions(std::make_unique<OpenCilkABIOptions>(FindOpenCilkABIBitCodeFilePath()));
 }
 
 // Unfortunately, the LLVM C API doesn't provide a way to create the
