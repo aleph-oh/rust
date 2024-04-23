@@ -785,9 +785,14 @@ download-rustc = false
     // unpack the tarballs.
 
     pub(crate) fn maybe_download_opencilk_runtime(&self) {
-        let url = "https://github.com/OpenCilk/cheetah/archive/dev/17.x.tar.gz";
+        let url =
+            "https://github.com/aleph-oh/cheetah-1/archive/dev-darwin-bitcode-multiple-arch.tar.gz";
         let destination = Path::new("src/llvm-project/cheetah");
-        self.maybe_download_opencilk_component(url, destination, Path::new("cheetah-dev"));
+        self.maybe_download_opencilk_component(
+            url,
+            destination,
+            Path::new("cheetah-1-dev-darwin-bitcode-multiple-arch"),
+        );
     }
 
     pub(crate) fn maybe_download_cilktools(&self) {
