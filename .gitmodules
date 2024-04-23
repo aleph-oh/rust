@@ -40,7 +40,7 @@
 	shallow = true
 [submodule "src/llvm-project"]
 	path = src/llvm-project
-	url = https://github.com/OpenCilk/opencilk-project.git
-    branch = dev/17.x
-    shallow = true
+	url = https://github.com/aleph-oh/opencilk-project.git
+	branch = dev/17.x-darwin-bitcode-multiple-arch
+	shallow = true
 	ignore = dirty
