@@ -49,21 +49,21 @@ fn unwind_subgraph(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
             .iter_enumerated()
             .filter_map(|(bb, bb_data)| bb_data.is_cleanup.then(|| bb)),
     );
-    let mut cleanup_blocks = BitSet::new_empty(body.basic_blocks.len());
+    let mut subgraph = BitSet::new_empty(body.basic_blocks.len());
 
     // Do a breadth-first search to find all blocks reachable from blocks labeled as cleanup.
     while let Some(block) = queue.pop() {
-        cleanup_blocks.insert(block);
+        subgraph.insert(block);
         queue.extend(body.basic_blocks[block].terminator().successors());
     }
 
     // Check the reachability condition.
     let predecessors = body.basic_blocks.predecessors();
-    for block in cleanup_blocks.iter().filter(|block| !body.basic_blocks[*block].is_cleanup) {
+    for block in subgraph.iter().filter(|block| !body.basic_blocks[*block].is_cleanup) {
         // We now need to know that all predecessors of this block are in the subgraph.
-        assert!(predecessors[block].iter().all(|pred| cleanup_blocks.contains(*pred)));
+        assert!(predecessors[block].iter().all(|pred| subgraph.contains(*pred)));
     }
-    cleanup_blocks
+    subgraph
 }
 
 impl TaskTree {
