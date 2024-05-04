@@ -169,5 +169,7 @@ impl dyn PrintBackendInfo + '_ {
 
 // FIXME(jhilton): this is better with const generics but we'll get more merge conflicts...
 pub trait MaybeSupportsTapir {
-    fn supports_tapir() -> bool;
+    fn supports_tapir() -> bool {
+        false
+    }
 }
