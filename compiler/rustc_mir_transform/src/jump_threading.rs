@@ -222,6 +222,18 @@ impl<'tcx, 'a> TOFinder<'tcx, 'a> {
             return;
         }
 
+        // If a predecessor of this block is a detach, skip the optimization.
+        let is_continuation_of_detach =
+            self.body.basic_blocks.predecessors()[bb].iter().any(|&pred| {
+                match self.body.basic_blocks[pred].terminator().kind {
+                    TerminatorKind::Detach { spawned_task: _, continuation } => continuation == bb,
+                    _ => false,
+                }
+            });
+        if is_continuation_of_detach {
+            return;
+        }
+
         debug!(cost = ?cost.cost());
         for (statement_index, stmt) in
             self.body.basic_blocks[bb].statements.iter().enumerate().rev()
