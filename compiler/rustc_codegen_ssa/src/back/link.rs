@@ -1292,11 +1292,31 @@ fn find_opencilk_runtime(_sess: &Session) -> PathBuf {
 fn add_opencilk_runtime(sess: &Session, linker: &mut dyn Linker) {
     // First, we want to add the OpenCilk runtime to the search path.
     let opencilk_runtime_search_dir = find_opencilk_runtime(sess);
-    linker.include_path(&opencilk_runtime_search_dir);
 
-    let name = if sess.target.is_like_osx { "opencilk_osx_dynamic" } else { "opencilk" };
     // Lastly, we link the OpenCilk runtime libraries.
-    linker.link_dylib_by_name(name, false, true);
+    // FIXME(jhilton): there's a bug here that causes linking with -static to fail since we first
+    // hint that we want dynamic libraries, then the -static flag forces all libraries linked to be
+    // static. I'm not sure how the sanitizers get around this case since they look to do basically
+    // the same thing, but let's try to more intelligently look at the session options before invoking
+    // [link_dylib_by_name].
+    // This is an attempt to fix the bug by, based on whether we're dynamically or statically linking,
+    // invoking a different linking option.
+
+    let name = if sess.target.is_like_osx {
+        if sess.opts.cg.prefer_dynamic { "opencilk_osx_dynamic" } else { "opencilk_osx" }
+    } else {
+        "opencilk"
+    };
+    let verbatim = false;
+    linker.include_path(&opencilk_runtime_search_dir);
+    if sess.opts.cg.prefer_dynamic {
+        let as_needed = true;
+        linker.link_dylib_by_name(name, verbatim, as_needed);
+    } else {
+        let whole_archive = true;
+        let search_paths = SearchPaths::default();
+        linker.link_staticlib_by_name(name, verbatim, whole_archive, &search_paths);
+    }
 }
 
 /// Returns a boolean indicating whether the specified crate should be ignored
@@ -2138,7 +2158,6 @@ fn linker_with_args<'a>(
 
     // Sanitizer libraries.
     add_sanitizer_libraries(sess, flavor, crate_type, cmd);
-
 
     // Object code from the current crate.
     // Take careful note of the ordering of the arguments we pass to the linker
