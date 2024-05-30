@@ -322,12 +322,9 @@ impl<'cx, 'a> Context<'cx, 'a> {
             | ExprKind::Become(_)
             // We don't bother supporting nice asserts for cilk_spawn because we don't add an implicit sync or anything.
             | ExprKind::CilkSpawn(_)
-            // FIXME(jhilton): We don't bother supporting nice asserts for cilk_scope because it's hard to determine what it should
-            // evaluate to, so instead it evaluates to None. I'll pick a better design where it actually evaluates to the trailing
-            // value if possible, but then it's questionable where the sync should be inserted. Under this design the sync would be
-            // inserted before the "last expression", which might clearly mean something since the last value in a block has to be
-            // not the result of a spawn to actually be used, which means that all spawns have to be before the trailing value?
-            // This might be easiest to figure out when lowering a cilk_scope to MIR, which is also where the analysis would warn.
+            // FIXME(jhilton): we don't bother supporting nice asserts for cilk_scope right now, but we should, since
+            // cilk_scope does evaluate to a useful type and will compile as long as the trailing expression doesn't
+            // depend on un-synced work.
             | ExprKind::CilkScope(..)
             // We don't bother supporting nice asserts for cilk_sync because it always evaluates to unit.
             | ExprKind::CilkSync

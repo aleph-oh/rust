@@ -375,6 +375,7 @@ impl<'a, 'tcx> MemCategorizationContext<'a, 'tcx> {
             | hir::ExprKind::InlineAsm(..)
             | hir::ExprKind::OffsetOf(..)
             | hir::ExprKind::CilkSpawn(..)
+            | hir::ExprKind::CilkScope(..)
             | hir::ExprKind::CilkSync
             | hir::ExprKind::Err(_) => Ok(self.cat_rvalue(expr.hir_id, expr_ty)),
         }

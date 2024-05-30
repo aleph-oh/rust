@@ -1534,6 +1534,10 @@ impl<'a> State<'a> {
                 self.word_space("cilk_spawn");
                 self.print_expr_maybe_paren(expr, parser::PREC_JUMP);
             }
+            hir::ExprKind::CilkScope(block) => {
+                self.word_space("cilk_scope");
+                self.print_block(block);
+            }
             hir::ExprKind::CilkSync => {
                 self.word("cilk_sync");
             }

@@ -296,7 +296,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     hir::ExprKind::CilkSpawn(self.arena.alloc(expr))
                 }
                 ExprKind::CilkScope(body) => {
-                    // FIXME(jhilton): here we should be actually lowering to a certain kind of HIR node.
                     let block = self.lower_block(body, false);
                     hir::ExprKind::Block(self.arena.alloc(block), None)
                 }

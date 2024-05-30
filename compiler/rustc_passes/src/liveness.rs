@@ -409,8 +409,7 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             hir::ExprKind::If(..)
             | hir::ExprKind::Match(..)
             | hir::ExprKind::Loop(..)
-            | hir::ExprKind::Yield(..)
-            | hir::ExprKind::CilkSpawn(..) => {
+            | hir::ExprKind::Yield(..) => {
                 self.add_live_node_for_node(expr.hir_id, ExprNode(expr.span, expr.hir_id));
             }
             hir::ExprKind::Binary(op, ..) if op.node.is_lazy() => {
@@ -447,6 +446,8 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::InlineAsm(..)
             | hir::ExprKind::OffsetOf(..)
             | hir::ExprKind::Type(..)
+            | hir::ExprKind::CilkSpawn(..)
+            | hir::ExprKind::CilkScope(..)
             | hir::ExprKind::CilkSync
             | hir::ExprKind::Err(_)
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
@@ -1045,6 +1046,8 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
 
             // NOTE(jhilton): This should be correct. We just need to include the contained expression in our liveness analysis.
             hir::ExprKind::CilkSpawn(expr) => self.propagate_through_expr(expr, succ),
+            // As long as our liveness in MIR is correct, this shouldn't matter.
+            hir::ExprKind::CilkScope(block) => self.propagate_through_block(block, succ),
 
             hir::ExprKind::AddrOf(_, _, ref e)
             | hir::ExprKind::Cast(ref e, _)
@@ -1411,6 +1414,7 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
         // NOTE(jhilton): there shouldn't be liveness-related correctness conditions here because
         // they're just control flow.
         | hir::ExprKind::CilkSpawn(..)
+        | hir::ExprKind::CilkScope(..)
         | hir::ExprKind::CilkSync
         | hir::ExprKind::Err(_) => {}
     }
