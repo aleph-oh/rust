@@ -586,6 +586,19 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block.unit()
             }
 
+            ExprKind::CilkScope { block: ast_block } => {
+                // FIXME(jhilton): lower this to something actually involving intrinsics for starting the
+                // runtime. We should be emitting intrinsic calls before and after the block to start and
+                // stop the runtime. Might also want to do something smarter if we think the runtime is
+                // already started, but it's probably possible to do a flow-sensitive analysis in dataflow
+                // of if the runtime has already been started.
+                unpack!(block = this.ast_block(destination, block, ast_block, source_info));
+                let next_block = this.cfg.start_new_block();
+                this.cfg.terminate(block, source_info, TerminatorKind::Sync { target: next_block });
+                block = next_block;
+                block.unit()
+            }
+
             ExprKind::CilkSync => {
                 let next_block = this.cfg.start_new_block();
                 this.cfg.terminate(block, source_info, TerminatorKind::Sync { target: next_block });

@@ -544,6 +544,12 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 self.print_expr(*computation, depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl);
             }
+            CilkScope { block } => {
+                print_indented!(self, "CilkScope {", depth_lvl);
+                print_indented!(self, "block:", depth_lvl + 1);
+                self.print_block(*block, depth_lvl + 2);
+                print_indented!(self, "}", depth_lvl);
+            }
             CilkSync => {
                 print_indented!(self, "CilkSync", depth_lvl);
             }

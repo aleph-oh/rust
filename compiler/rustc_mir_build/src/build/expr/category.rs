@@ -56,6 +56,7 @@ impl Category {
             | ExprKind::Call { .. }
             | ExprKind::InlineAsm { .. }
             | ExprKind::CilkSpawn { .. }
+            | ExprKind::CilkScope { .. }
             // NOTE(jhilton): I think this makes sense. It doesn't really fit
             // into any of these categories very well though. It's a control flow
             // construct like the other ones that resolve to nonterminating.
