@@ -297,7 +297,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 }
                 ExprKind::CilkScope(body) => {
                     let block = self.lower_block(body, false);
-                    hir::ExprKind::Block(self.arena.alloc(block), None)
+                    hir::ExprKind::CilkScope(self.arena.alloc(block))
                 }
                 ExprKind::CilkSync => hir::ExprKind::CilkSync,
                 ExprKind::InlineAsm(asm) => {
