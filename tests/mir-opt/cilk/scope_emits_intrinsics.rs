@@ -8,7 +8,7 @@
 // EMIT_MIR scope_emits_intrinsics.fn0.built.after.mir
 pub fn fn0() -> bool {
     // CHECK: tapir_runtime_start
-    // CHECK: tapir_runtime_end
+    // CHECK: tapir_runtime_stop
     let x = cilk_scope { true };
     x
 }
