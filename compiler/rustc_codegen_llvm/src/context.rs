@@ -948,6 +948,8 @@ impl<'ll> CodegenCx<'ll, '_> {
         ifn!("llvm.ptrmask", fn(ptr, t_isize) -> ptr);
 
         ifn!("llvm.syncregion.start", fn() -> t_token);
+        ifn!("tapir.runtime.start", fn() -> t_token);
+        ifn!("tapir.runtime.stop", fn(t_token) -> void);
 
         None
     }
