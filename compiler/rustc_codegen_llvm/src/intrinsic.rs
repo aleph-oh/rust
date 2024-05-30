@@ -458,12 +458,12 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
     }
 
     fn tapir_runtime_start(&mut self) -> &'ll Value {
-       self.call_intrinsic("tapir.runtime.start", &[])
+        self.call_intrinsic("llvm.tapir.runtime.start", &[])
     }
 
     fn tapir_runtime_stop(&mut self, token: &'ll Value) {
         // This intrinsic should return void anyways.
-        self.call_intrinsic("tapir.runtime.stop", &[token]);
+        self.call_intrinsic("llvm.tapir.runtime.stop", &[token]);
     }
 }
 
