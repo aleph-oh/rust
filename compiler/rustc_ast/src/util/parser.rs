@@ -284,6 +284,7 @@ pub enum ExprPrecedence {
     Loop,
     Match,
     CilkSpawn,
+    CilkScope,
     ConstBlock,
     Block,
     TryBlock,
@@ -353,6 +354,7 @@ impl ExprPrecedence {
             | ExprPrecedence::Loop
             | ExprPrecedence::Match
             | ExprPrecedence::CilkSpawn
+            | ExprPrecedence::CilkScope
             | ExprPrecedence::ConstBlock
             | ExprPrecedence::Block
             | ExprPrecedence::TryBlock

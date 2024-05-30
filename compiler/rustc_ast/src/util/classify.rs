@@ -58,6 +58,7 @@ pub fn expr_trailing_brace(mut expr: &ast::Expr) -> Option<&ast::Expr> {
             | TryBlock(..)
             | While(..)
             | CilkSpawn(..)
+            | CilkScope(..)
             | ConstBlock(_) => break Some(expr),
 
             MacCall(mac) => {

@@ -1483,6 +1483,8 @@ impl<'a> Parser<'a> {
                 )
             } else if this.eat_keyword(kw::CilkSpawn) {
                 this.parse_cilk_spawn()
+            } else if this.eat_keyword(kw::CilkScope) {
+                this.parse_cilk_scope()
             } else if this.check_inline_const(0) {
                 this.parse_const_block(lo.to(this.token.span), false)
             } else if this.may_recover() && this.is_do_catch_block() {
@@ -3430,6 +3432,23 @@ impl<'a> Parser<'a> {
         Ok(self.mk_expr_with_attrs(body_span.to(self.prev_token.span), kind, attrs))
     }
 
+    /// Parses the block in cilk_scope <block>. Precondition: cilk_scope already eaten.
+    fn parse_cilk_scope(&mut self) -> PResult<'a, P<Expr>> {
+        // NOTE(jhilton): This is temporarily very similar to `parse_cilk_spawn`. Repetitiveness in parsing
+        // between syntactic structures that aren't intentionally similar isn't something I really mind,
+        // since it makes it more obvious what's being parsed.
+        let scope_span = self.prev_token.span;
+        self.sess.gated_spans.gate(sym::cilk, scope_span);
+        // cilk_scope should prefix a block, so noew we want there to be a block after this.
+        let (attrs, body) = self.parse_inner_attrs_and_block().map_err(|mut err| {
+            err.span_label(scope_span, "while parsing this `cilk_scope` expression");
+            err
+        })?;
+        let body_span = body.span;
+        let kind = ExprKind::CilkScope(body);
+        Ok(self.mk_expr_with_attrs(body_span.to(self.prev_token.span), kind, attrs))
+    }
+
     fn maybe_parse_struct_expr(
         &mut self,
         qself: &Option<P<ast::QSelf>>,
@@ -3926,6 +3945,9 @@ impl MutVisitor for CondChecker<'_> {
                 self.comparison = comparison;
             }
             ExprKind::CilkSpawn(ref _block) => {
+                todo!()
+            }
+            ExprKind::CilkScope(ref _block) => {
                 todo!()
             }
             ExprKind::Unary(_, _)
