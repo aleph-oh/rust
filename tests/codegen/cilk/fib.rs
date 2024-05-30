@@ -13,6 +13,7 @@ pub fn fib(n: u8) -> usize {
         let x = cilk_spawn { fib(n - 1) };
         // CHECK: reattach
         let y = fib(n - 2);
+        // CHECK: sync
         cilk_sync;
         x + y
     }
