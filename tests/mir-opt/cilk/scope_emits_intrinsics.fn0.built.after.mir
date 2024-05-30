@@ -9,7 +9,13 @@ fn fn0() -> bool {
 
     bb0: {
         StorageLive(_1);
+        tapir_runtime_start();
         _1 = const true;
+        sync -> bb1;
+    }
+
+    bb1: {
+        tapir_runtime_stop();
         FakeRead(ForLet(None), _1);
         _0 = _1;
         StorageDead(_1);
