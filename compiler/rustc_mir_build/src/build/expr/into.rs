@@ -588,7 +588,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
             ExprKind::CilkScope { block: ast_block } => {
                 // First, give a hint to start the runtime at the beginning of the scope.
-                let start_runtime_kind = StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStart));
+                let start_runtime_kind =
+                    StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStart));
                 let start_runtime = Statement { source_info, kind: start_runtime_kind };
                 this.cfg.push(block, start_runtime);
 
@@ -602,7 +603,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block = next_block;
 
                 // Lastly, give a hint to stop the runtime at the end of the scope.
-                let end_runtime_kind = StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStop));
+                let end_runtime_kind =
+                    StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStop));
                 let end_runtime = Statement { source_info, kind: end_runtime_kind };
                 this.cfg.push(block, end_runtime);
 
