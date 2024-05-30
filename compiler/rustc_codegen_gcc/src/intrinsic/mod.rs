@@ -418,6 +418,18 @@ impl<'a, 'gcc, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'a, 'gcc, 'tcx> {
     fn va_end(&mut self, _va_list: RValue<'gcc>) -> RValue<'gcc> {
         unimplemented!();
     }
+
+    fn sync_region_start(&mut self) -> RValue<'gcc> {
+        unimplemented!();
+    }
+
+    fn tapir_runtime_start(&mut self) -> RValue<'gcc> {
+        unimplemented!();
+    }
+
+    fn tapir_runtime_stop(&mut self, token: RValue<'gcc>) {
+        unimplemented!()
+    }
 }
 
 impl<'a, 'gcc, 'tcx> ArgAbiMethods<'tcx> for Builder<'a, 'gcc, 'tcx> {

@@ -91,12 +91,19 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 bx.memcpy(dst, align, src, align, bytes, crate::MemFlags::empty());
             }
             mir::StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStart) => {
-                let token = bx.tapir_runtime_start();
-                self.runtime_hint_stack.push(token);
+                if Bx::supports_tapir() {
+                    let token = bx.tapir_runtime_start();
+                    self.runtime_hint_stack.push(token);
+                }
             }
             mir::StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStop) => {
-                let token = self.runtime_hint_stack.pop().expect("should always hint starting runtime before stopping it!");
-                bx.tapir_runtime_stop(token);
+                if Bx::supports_tapir() {
+                    let token = self
+                        .runtime_hint_stack
+                        .pop()
+                        .expect("should always hint starting runtime before stopping it!");
+                    bx.tapir_runtime_stop(token);
+                }
             }
             mir::StatementKind::FakeRead(..)
             | mir::StatementKind::Retag { .. }
