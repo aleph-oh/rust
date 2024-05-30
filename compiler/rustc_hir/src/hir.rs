@@ -1598,6 +1598,7 @@ impl Expr<'_> {
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
             ExprKind::CilkSpawn(..) => ExprPrecedence::CilkSpawn,
+            ExprKind::CilkScope(..) => ExprPrecedence::CilkScope,
             ExprKind::CilkSync => ExprPrecedence::CilkSync,
             ExprKind::Err(_) => ExprPrecedence::Err,
         }
@@ -1667,6 +1668,7 @@ impl Expr<'_> {
             | ExprKind::Cast(..)
             | ExprKind::DropTemps(..)
             | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkScope(..)
             | ExprKind::CilkSync
             | ExprKind::Err(_) => false,
         }
@@ -1753,6 +1755,7 @@ impl Expr<'_> {
             | ExprKind::Yield(..)
             | ExprKind::DropTemps(..)
             | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkScope(..)
             | ExprKind::CilkSync
             | ExprKind::Err(_) => true,
         }
@@ -1932,6 +1935,9 @@ pub enum ExprKind<'hir> {
 
     /// An expression that makes the right-hand side potentially parallel with the continuation.
     CilkSpawn(&'hir Expr<'hir>),
+
+    /// An expression that implicitly syncs at the end of the contained block.
+    CilkScope(&'hir Block<'hir>),
 
     /// A suspension point for spawned tasks.
     CilkSync,

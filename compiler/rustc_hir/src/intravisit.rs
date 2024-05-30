@@ -808,6 +808,9 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr<'v>) 
         ExprKind::CilkSpawn(expr) => {
             visitor.visit_expr(expr);
         }
+        ExprKind::CilkScope(block) => {
+            visitor.visit_block(block);
+        }
         ExprKind::CilkSync | ExprKind::Lit(_) | ExprKind::Err(_) => {}
     }
 }
