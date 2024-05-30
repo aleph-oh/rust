@@ -502,9 +502,6 @@ pub enum ExprKind<'tcx> {
     CilkScope {
         block: BlockId,
     },
-    // FIXME(jhilton): does the type of CilkSync make sense here? Where does automatic sync insertion belong?
-    //  We might have enough info to do it in HIR but most desugaring happens in MIR and we have more dataflow
-    //  info there anyways.
     CilkSync,
 }
 
