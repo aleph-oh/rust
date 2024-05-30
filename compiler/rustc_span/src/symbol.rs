@@ -33,6 +33,7 @@ symbols! {
 
         // NOTE(jhilton): do spawn and sync make sense as unstable keywords? At some point they should
         //  probably become stable keywords.
+        //  Same applies to scope here.
 
         // Keywords that are used in stable Rust.
         As:                 "as",
@@ -77,6 +78,7 @@ symbols! {
         Box:                "box",
         CilkSpawn:          "cilk_spawn",
         CilkSync:           "cilk_sync",
+        CilkScope:          "cilk_scope",
         Do:                 "do",
         Final:              "final",
         Macro:              "macro",

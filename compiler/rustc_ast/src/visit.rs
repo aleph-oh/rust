@@ -955,6 +955,7 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expression: &'a Expr) {
         ExprKind::Try(subexpression) => visitor.visit_expr(subexpression),
         ExprKind::TryBlock(body) => visitor.visit_block(body),
         ExprKind::CilkSpawn(body) => visitor.visit_block(body),
+        ExprKind::CilkScope(body) => visitor.visit_block(body),
         ExprKind::Lit(_) | ExprKind::IncludedBytes(..) | ExprKind::CilkSync | ExprKind::Err => {}
     }
 

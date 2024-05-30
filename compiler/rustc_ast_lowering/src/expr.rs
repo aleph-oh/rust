@@ -295,6 +295,11 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     let expr = self.expr_block(block);
                     hir::ExprKind::CilkSpawn(self.arena.alloc(expr))
                 }
+                ExprKind::CilkScope(body) => {
+                    // FIXME(jhilton): here we should be actually lowering to a certain kind of HIR node.
+                    let block = self.lower_block(body, false);
+                    hir::ExprKind::Block(self.arena.alloc(block), None)
+                }
                 ExprKind::CilkSync => hir::ExprKind::CilkSync,
                 ExprKind::InlineAsm(asm) => {
                     hir::ExprKind::InlineAsm(self.lower_inline_asm(e.span, asm))

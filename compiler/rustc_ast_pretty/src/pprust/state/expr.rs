@@ -820,6 +820,12 @@ impl<'a> State<'a> {
                 self.word_nbsp("cilk_spawn");
                 self.print_block_with_attrs(body, attrs);
             }
+            ast::ExprKind::CilkScope(body) => {
+                self.cbox(0);
+                self.ibox(0);
+                self.word_nbsp("cilk_scope");
+                self.print_block_with_attrs(body, attrs);
+            }
             ast::ExprKind::CilkSync => {
                 self.word("cilk_sync");
             }
