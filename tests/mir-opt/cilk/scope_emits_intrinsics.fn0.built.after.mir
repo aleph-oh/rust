@@ -1,0 +1,18 @@
+// MIR for `fn0` after built
+
+fn fn0() -> bool {
+    let mut _0: bool;
+    let _1: bool;
+    scope 1 {
+        debug x => _1;
+    }
+
+    bb0: {
+        StorageLive(_1);
+        _1 = const true;
+        FakeRead(ForLet(None), _1);
+        _0 = _1;
+        StorageDead(_1);
+        return;
+    }
+}
