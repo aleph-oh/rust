@@ -8,7 +8,7 @@ pub fn fib(n: u8) -> usize {
     }
 
     cilk_scope {
-        // CHECK: tapir.runtime.start
+        // CHECK: llvm.tapir.runtime.start
         // CHECK: detach
         let x = cilk_spawn { fib(n - 1) };
         // CHECK: reattach
@@ -17,7 +17,7 @@ pub fn fib(n: u8) -> usize {
         cilk_sync;
         x + y
     }
-    // CHECK: tapir.runtime.stop
+    // CHECK: llvm.tapir.runtime.stop
 }
 
 fn main() {
