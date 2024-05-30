@@ -8,6 +8,7 @@ use rustc_middle::mir::UnwindTerminateReason;
 use rustc_middle::ty::layout::{FnAbiOf, HasTyCtxt, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeFoldable, TypeVisitableExt};
 use rustc_target::abi::call::{FnAbi, PassMode};
+use smallvec::SmallVec;
 
 use std::iter;
 
@@ -117,6 +118,11 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     /// similar to PhantomData. We do cache the sync region so that the first time it's requested,
     /// we add a statement to compute the sync region.
     sync_region: Option<Bx::Value>,
+
+    /// A stack of values returned from `tapir_runtime_start` for use in their corresponding `tapir_runtime_stop`
+    /// call. We might need a more complex data structure than this if the token should ever be reused, but it's
+    /// my impression that that isn't the case.
+    runtime_hint_stack: SmallVec<[Bx::Value; 1]>,
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
@@ -215,6 +221,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         per_local_var_debug_info: None,
         caller_location: None,
         sync_region: None,
+        runtime_hint_stack: SmallVec::new(),
     };
 
     // It may seem like we should iterate over `required_consts` to ensure they all successfully

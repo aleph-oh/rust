@@ -697,6 +697,8 @@ impl Display for NonDivergingIntrinsic<'_> {
             Self::CopyNonOverlapping(CopyNonOverlapping { src, dst, count }) => {
                 write!(f, "copy_nonoverlapping(dst = {dst:?}, src = {src:?}, count = {count:?})")
             }
+            Self::TapirRuntimeStart => write!(f, "tapir_runtime_start()"),
+            Self::TapirRuntimeStop => write!(f, "tapir_runtime_stop()"),
         }
     }
 }
