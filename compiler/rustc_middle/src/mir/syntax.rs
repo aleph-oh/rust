@@ -444,6 +444,18 @@ pub enum NonDivergingIntrinsic<'tcx> {
     /// **Needs clarification**: Is this typed or not, ie is there a typed load and store involved?
     /// I vaguely remember Ralf saying somewhere that he thought it should not be.
     CopyNonOverlapping(CopyNonOverlapping<'tcx>),
+
+    /// Denotes a call to the intrinsic function `tapir_runtime_start`.
+    ///
+    /// Although one value is returned, it won't be observed by any Rust caller since it's a
+    /// token for use by `tapir_runtime_stop`.
+    TapirRuntimeStart,
+
+   /// Denotes a call to the intrinsic function `tapir_runtime_stop`.
+   ///
+   /// Although one value is accepted as a parameter, it won't be observed by any Rust caller
+   /// since it's a token from `tapir_runtime_start`.
+   TapirRuntimeStop,
 }
 
 /// Describes what kind of retag is to be performed.

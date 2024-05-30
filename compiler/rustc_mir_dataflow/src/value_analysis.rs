@@ -136,6 +136,10 @@ pub trait ValueAnalysis<'tcx> {
             }) => {
                 // This statement represents `*dst = *src`, `count` times.
             }
+            // Both of these intrinsics accept no parameters other than tokens,
+            // which we handle during code generation.
+            NonDivergingIntrinsic::TapirRuntimeStart => {}
+            NonDivergingIntrinsic::TapirRuntimeStop => {}
         }
     }
 

@@ -62,6 +62,8 @@ impl<'cx, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'cx, 'tcx> {
                 self.consume_operand(location, dst);
                 self.consume_operand(location, count);
             }
+            // Only relevant for hinting when to start the runtime, for which we need something to lower to LLVM IR.
+            StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStart) | StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStop) => {}
             // Only relevant for mir typeck
             StatementKind::AscribeUserType(..)
             // Only relevant for liveness and unsafeck

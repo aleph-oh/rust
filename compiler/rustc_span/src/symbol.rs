@@ -1641,6 +1641,8 @@ symbols! {
         sync,
         sync_region_start,
         t32,
+        tapir_runtime_start,
+        tapir_runtime_stop,
         target,
         target_abi,
         target_arch,

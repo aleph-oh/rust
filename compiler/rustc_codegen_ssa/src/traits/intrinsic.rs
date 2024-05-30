@@ -37,4 +37,6 @@ pub trait IntrinsicCallMethods<'tcx>: BackendTypes {
     /// Rust defined C-variadic functions return.
     fn va_end(&mut self, val: Self::Value) -> Self::Value;
     fn sync_region_start(&mut self) -> Self::Value;
+    fn tapir_runtime_start(&mut self) -> Self::Value;
+    fn tapir_runtime_stop(&mut self, token: Self::Value);
 }

@@ -1369,6 +1369,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                     stmt.source_info.span,
                     "Unexpected NonDivergingIntrinsic::CopyNonOverlapping, should only appear after lowering_intrinsics",
                 ),
+                NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop => {}
             },
             StatementKind::FakeRead(..)
             | StatementKind::StorageLive(..)

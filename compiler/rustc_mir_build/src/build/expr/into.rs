@@ -587,15 +587,26 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             }
 
             ExprKind::CilkScope { block: ast_block } => {
-                // FIXME(jhilton): lower this to something actually involving intrinsics for starting the
-                // runtime. We should be emitting intrinsic calls before and after the block to start and
-                // stop the runtime. Might also want to do something smarter if we think the runtime is
-                // already started, but it's probably possible to do a flow-sensitive analysis in dataflow
-                // of if the runtime has already been started.
+                // First, give a hint to start the runtime at the beginning of the scope.
+                let start_runtime_kind = StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStart));
+                let start_runtime = Statement { source_info, kind: start_runtime_kind };
+                this.cfg.push(block, start_runtime);
+
+                // Next, generate the code for the block and end it in a sync.
                 unpack!(block = this.ast_block(destination, block, ast_block, source_info));
                 let next_block = this.cfg.start_new_block();
                 this.cfg.terminate(block, source_info, TerminatorKind::Sync { target: next_block });
+
+                // Update the block cursor, since we should now only be modifying from the block that's reached by the
+                // sync.
                 block = next_block;
+
+                // Lastly, give a hint to stop the runtime at the end of the scope.
+                let end_runtime_kind = StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStop));
+                let end_runtime = Statement { source_info, kind: end_runtime_kind };
+                this.cfg.push(block, end_runtime);
+
+                // Hand back the new cursor.
                 block.unit()
             }
 
