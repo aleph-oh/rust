@@ -102,7 +102,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                         .runtime_hint_stack
                         .pop()
                         .expect("should always hint starting runtime before stopping it!");
-                    bx.tapir_runtime_stop(token);
+                    bx.tapir_runtime_end(token);
                 }
             }
             mir::StatementKind::FakeRead(..)

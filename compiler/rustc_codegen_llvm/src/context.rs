@@ -949,7 +949,7 @@ impl<'ll> CodegenCx<'ll, '_> {
 
         ifn!("llvm.syncregion.start", fn() -> t_token);
         ifn!("llvm.tapir.runtime.start", fn() -> t_token);
-        ifn!("llvm.tapir.runtime.stop", fn(t_token) -> void);
+        ifn!("llvm.tapir.runtime.end", fn(t_token) -> void);
 
         None
     }
