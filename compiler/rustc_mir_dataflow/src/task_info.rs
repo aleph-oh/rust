@@ -16,15 +16,29 @@ rustc_index::newtype_index! {
     pub struct Spindle {}
 }
 
-struct TaskData {
-    pub spindles: SmallVec<[Spindle; 2]>,
-    pub parent: Option<Task>,
-    pub children: SmallVec<[Task; 2]>,
-    pub last_location: Option<Location>,
+/// A temporary representation of the data associated with a task.
+/// See [TaskData] for a different representation which simplifies
+/// some operations and rules out some invalid states.
+struct TaskDataBuilder {
+    /// The spindles in this task.
+    spindles: SmallVec<[Spindle; 2]>,
+    /// The parent of this task. None if this task is the root task.
+    parent: Option<Task>,
+    /// The children of this task.
+    children: SmallVec<[Task; 2]>,
+    /// The [Location] where this task reattaches to the continuation of the spawning detach.
+    /// None if this task is the root task.
+    last_location: Option<Location>,
 }
 
-impl TaskData {
-    /// Create a new [TaskData] which is the root of the task tree and has no parent.
+#[derive(Debug)]
+enum InvalidTaskData {
+    MissingLastLocation,
+    MissingParent,
+}
+
+impl TaskDataBuilder {
+    /// Create a new [TaskDataBuilder] which is the root of the task tree and has no parent.
     fn root() -> Self {
         Self {
             spindles: SmallVec::new(),
@@ -35,8 +49,8 @@ impl TaskData {
     }
 
     /// Create a new task in `tasks` which is a child of `parent` and return the child task.
-    fn new_child(tasks: &mut IndexVec<Task, TaskData>, parent: Task) -> Task {
-        let child_data = TaskData {
+    fn new_child(tasks: &mut IndexVec<Task, TaskDataBuilder>, parent: Task) -> Task {
+        let child_data = TaskDataBuilder {
             spindles: SmallVec::new(),
             parent: Some(parent),
             children: SmallVec::new(),
@@ -47,9 +61,54 @@ impl TaskData {
         parent_data.children.push(child);
         child
     }
+
+    fn build(self, num_tasks: usize, num_spindles: usize) -> Result<TaskData, InvalidTaskData> {
+        let kind = match (self.parent, self.last_location) {
+            (None, None) => Ok(TaskKind::Root),
+            (Some(parent), Some(last_location)) => Ok(TaskKind::Child { parent, last_location }),
+            (None, _) => Err(InvalidTaskData::MissingParent),
+            (_, None) => Err(InvalidTaskData::MissingLastLocation),
+        }?;
+
+        let mut children = BitSet::new_empty(num_tasks);
+        for child in self.children {
+            children.insert(child);
+        }
+
+        let mut spindles = BitSet::new_empty(num_spindles);
+        for spindle in self.spindles {
+            spindles.insert(spindle);
+        }
+        Ok(TaskData { spindles, children, kind })
+    }
 }
 
-// Empty for now, we'll add associated data to this as we need it.
+pub enum TaskKind {
+    Root,
+    Child { parent: Task, last_location: Location },
+}
+
+impl TaskKind {
+    /// Finds the parent of this task, returning None if it doesn't exist.
+    pub fn parent(&self) -> Option<Task> {
+        if let Self::Child { parent, .. } = self { Some(*parent) } else { None }
+    }
+
+    /// Finds the last location of this task, returning None if it doesn't exist.
+    pub fn last_location(&self) -> Option<Location> {
+        if let Self::Child { last_location, .. } = self { Some(*last_location) } else { None }
+    }
+}
+
+pub struct TaskData {
+    /// The spindles in this task.
+    pub spindles: BitSet<Spindle>,
+    /// The children of this task.
+    pub children: BitSet<Task>,
+    /// Whether this is a root or child task.
+    pub kind: TaskKind,
+}
+
 struct SpindleData {
     task: Task,
 }
@@ -92,34 +151,29 @@ fn unwind_subgraph(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
     subgraph
 }
 
-pub struct TaskInfo {
-    tasks: IndexVec<Task, TaskData>,
+struct TaskInfoBuilder {
+    tasks: IndexVec<Task, TaskDataBuilder>,
     spindles: IndexVec<Spindle, SpindleData>,
     block_tasks: FxHashMap<BasicBlock, Task>,
     block_spindles: FxHashMap<BasicBlock, Spindle>,
+    // TODO(jhilton): move unwind subgraph and cleanup blocks into builder
+    // so we can check the labeling invariant.
 }
 
-impl TaskInfo {
-    /// Find the task associated with `block`, panicking if there is no such task.
-    pub fn expect_task(&self, block: BasicBlock) -> Task {
-        *self.block_tasks.get(&block).expect("expected task to be defined for basic block!")
-    }
+pub struct TaskInfo {
+    /// Pool of tasks, including associated data.
+    tasks: IndexVec<Task, TaskData>,
+    /// Pool of spindles, including associated data.
+    spindles: IndexVec<Spindle, SpindleData>,
+    /// Mapping from `BasicBlock` to the `Spindle` containing it, or None if no such `BasicBlock` exists.
+    block_spindles: IndexVec<BasicBlock, Option<Spindle>>,
+}
 
+impl TaskInfoBuilder {
     /// Find the parent task of `task`, panicking if `task` is an invalid index
     /// or the task has no parent.
     pub fn expect_parent_task(&self, task: Task) -> Task {
         self.tasks[task].parent.expect("expected task to have parent!")
-    }
-
-    /// Find the spindle associated with `block`, panicking if there is no such spindle.
-    pub fn expect_spindle(&self, block: BasicBlock) -> Spindle {
-        *self.block_spindles.get(&block).expect("expected spindle to be defined for basic block!")
-    }
-
-    /// Find the descendants of `task`.
-    pub fn descendants(&self, task: Task) -> Box<dyn Iterator<Item = Task> + '_> {
-        let task_data = &self.tasks[task];
-        Box::new(task_data.children.iter().flat_map(|t| self.descendants(*t)))
     }
 
     /// Associate a new spindle in `task` with `block`.
@@ -147,7 +201,7 @@ impl TaskInfo {
         continuation: BasicBlock,
     ) {
         // First, update our task state.
-        let new_task = TaskData::new_child(&mut self.tasks, current_task);
+        let new_task = TaskDataBuilder::new_child(&mut self.tasks, current_task);
         self.label_block_task(spawned_task, new_task);
         self.label_block_task(continuation, current_task);
 
@@ -202,9 +256,9 @@ impl TaskInfo {
         });
     }
 
-    /// Construct a [TaskInfo] from `body`.
+    /// Construct a [TaskInfoBuilder] from `body`.
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
-        let mut task_info = Self {
+        let mut builder = Self {
             tasks: IndexVec::new(),
             spindles: IndexVec::new(),
             block_tasks: FxHashMap::default(),
@@ -219,57 +273,186 @@ impl TaskInfo {
                 continue;
             }
 
-            let block_tasks_empty = task_info.block_tasks.is_empty();
-            let current_task = *task_info.block_tasks.entry(block).or_insert_with(|| {
+            let block_tasks_empty = builder.block_tasks.is_empty();
+            let current_task = *builder.block_tasks.entry(block).or_insert_with(|| {
                 assert!(block_tasks_empty, "expected the first task to be the only orphan task!");
 
-                task_info.tasks.push(TaskData::root())
+                builder.tasks.push(TaskDataBuilder::root())
             });
 
-            let block_spindles_empty = task_info.block_spindles.is_empty();
-            let current_spindle = *task_info.block_spindles.entry(block).or_insert_with(|| {
+            let block_spindles_empty = builder.block_spindles.is_empty();
+            let current_spindle = *builder.block_spindles.entry(block).or_insert_with(|| {
                 assert!(
                     block_spindles_empty,
                     "expected the first spindle to be the only non-associated spindle!"
                 );
-                task_info.spindles.push(SpindleData { task: current_task })
+                builder.spindles.push(SpindleData { task: current_task })
             });
 
             let location = Location { block, statement_index: block_data.statements.len() };
             let terminator = block_data.terminator();
             match &terminator.kind {
                 mir::TerminatorKind::Detach { spawned_task, continuation } => {
-                    task_info.detach_to(current_task, *spawned_task, *continuation);
+                    builder.detach_to(current_task, *spawned_task, *continuation);
                 }
 
                 mir::TerminatorKind::Reattach { continuation } => {
-                    task_info.reattach_to(location, current_task, *continuation);
+                    builder.reattach_to(location, current_task, *continuation);
                 }
 
                 mir::TerminatorKind::Sync { target } => {
-                    task_info.sync_to(current_task, *target);
+                    builder.sync_to(current_task, *target);
                 }
 
                 mir::TerminatorKind::SwitchInt { discr: _, targets } => {
-                    task_info.switch_int_to(current_task, targets.all_targets().iter().copied());
+                    builder.switch_int_to(current_task, targets.all_targets().iter().copied());
                 }
 
                 _ => {
                     terminator.successors().for_each(|t| {
                         if !cleanup_blocks.contains(t) {
                             // Same spindle, same task.
-                            task_info.label_block_task(block, current_task);
-                            task_info.label_block_spindle(block, current_spindle);
+                            builder.label_block_task(block, current_task);
+                            builder.label_block_spindle(block, current_spindle);
                         }
                     })
                 }
             }
         }
 
-        for (spindle, spindle_data) in task_info.spindles.iter_enumerated() {
-            task_info.tasks[spindle_data.task].spindles.push(spindle);
+        for (spindle, spindle_data) in builder.spindles.iter_enumerated() {
+            builder.tasks[spindle_data.task].spindles.push(spindle);
+        }
+
+        builder
+    }
+
+    fn validate_spindle_bounds(task_info: &TaskInfo) {
+        for spindle in task_info.block_spindles.indices() {
+            assert!(spindle.as_usize() < task_info.spindles.len());
+        }
+    }
+
+    fn validate_parent_child_relationship(task_info: &TaskInfo, task: Task) {
+        // All children of this task should have this task marked as a parent.
+        let task_data = &task_info.tasks[task];
+        for child_data in task_data.children.iter().map(|child| &task_info.tasks[child]) {
+            assert_eq!(
+                child_data.kind.parent(),
+                Some(task),
+                "expected child to have parent as task!"
+            );
+        }
+
+        // This task's parent should contain this task as a child.
+        if let Some(parent) = task_data.kind.parent() {
+            let parent_data = &task_info.tasks[parent];
+            assert!(parent_data.children.contains(task), "expected parent to have child as task!");
+        }
+    }
+
+    fn validate_domain_sizes(task_info: &TaskInfo) {
+        let (task, other_tasks) = task_info.tasks.split_first().expect("expected at least 1 task!");
+        for other_task in other_tasks {
+            assert_eq!(
+                task.children.domain_size(),
+                other_task.children.domain_size(),
+                "expected consistent domain size between task children!"
+            );
+            assert_eq!(
+                task.spindles.domain_size(),
+                other_task.spindles.domain_size(),
+                "expected consistent domain size between task spindles!"
+            );
+        }
+
+        assert_eq!(task.children.domain_size(), task_info.tasks.len());
+        assert_eq!(task.spindles.domain_size(), task_info.spindles.len());
+    }
+
+    #[allow(rustc::potential_query_instability)]
+    // Iteration order doesn't actually matter here. The map has unique keys by definition
+    // so inserting into block_spindles this way is order-independent.
+    fn convert_block_spindles(
+        block_spindles_map: &FxHashMap<BasicBlock, Spindle>,
+        basic_block_count: usize,
+    ) -> IndexVec<BasicBlock, Option<Spindle>> {
+        let mut block_spindles = IndexVec::from_elem_n(None, basic_block_count);
+        for (basic_block, spindle) in block_spindles_map {
+            block_spindles[*basic_block] = Some(*spindle);
+        }
+
+        block_spindles
+    }
+
+    //  Convert the [TaskInfoBuilder] into a [TaskInfo].
+    pub fn build(self, basic_block_count: usize) -> TaskInfo {
+        let Self { tasks, spindles, block_tasks: _, block_spindles } = self;
+
+        let num_tasks = tasks.len();
+        let tasks: IndexVec<Task, TaskData> = tasks
+            .into_iter()
+            .map(|task_data| {
+                task_data
+                    .build(num_tasks, spindles.len())
+                    .expect("expected task data invariants to be upheld!")
+            })
+            .collect();
+
+        let block_spindles =
+            TaskInfoBuilder::convert_block_spindles(&block_spindles, basic_block_count);
+
+        let task_info = TaskInfo { tasks, spindles, block_spindles };
+        // Domain sizes should agree with IndexVec sizes.
+        TaskInfoBuilder::validate_domain_sizes(&task_info);
+
+        // All hashmap values should also be in bounds.
+        TaskInfoBuilder::validate_spindle_bounds(&task_info);
+
+        // Parent-child relationships should agree within tasks.
+        for task in task_info.tasks.indices() {
+            TaskInfoBuilder::validate_parent_child_relationship(&task_info, task);
         }
 
         task_info
+    }
+}
+
+impl TaskInfo {
+    /// Find the task associated with `block`, panicking if there is no such task.
+    pub fn expect_task(&self, block: BasicBlock) -> Task {
+        let spindle = self.expect_spindle(block);
+        self.spindles[spindle].task
+    }
+
+    /// Find the parent task of `task`, panicking if `task` is an invalid index
+    /// or the task has no parent.
+    pub fn expect_parent_task(&self, task: Task) -> Task {
+        self.tasks[task].kind.parent().expect("expected task to have parent, but was root!")
+    }
+
+    /// Find the spindle associated with `block`, panicking if there is no such spindle.
+    pub fn expect_spindle(&self, block: BasicBlock) -> Spindle {
+        self.block_spindles
+            .get(block)
+            .copied()
+            .flatten()
+            .expect("expected spindle to be defined for basic block!")
+    }
+
+    /// Find the descendants of `task`.
+    pub fn descendants(&self, task: Task) -> Box<dyn Iterator<Item = Task> + '_> {
+        let task_data = &self.tasks[task];
+        Box::new(task_data.children.iter().flat_map(|t| self.descendants(t)))
+    }
+
+    // Should be fine to only sync children in terms of dataflow state to restore?
+    // So maybe we don't need descendants?
+    pub fn children(&self, task: Task) -> impl Iterator<Item = Task> + '_ {
+        self.tasks[task].children.iter()
+    }
+
+    pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
+        TaskInfoBuilder::from_body(body).build(body.basic_blocks.len())
     }
 }
