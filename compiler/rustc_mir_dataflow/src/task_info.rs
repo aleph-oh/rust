@@ -110,6 +110,7 @@ pub struct TaskData {
     pub kind: TaskKind,
 }
 
+#[derive(Copy, Clone)]
 struct SpindleDataBuilder {
     task: Task,
     entry: BasicBlock,
@@ -119,6 +120,12 @@ struct SpindleData {
     task: Task,
     entry: BasicBlock,
     blocks: SmallVec<[BasicBlock; 2]>,
+}
+
+impl From<SpindleDataBuilder> for SpindleData {
+    fn from(SpindleDataBuilder { task, entry }: SpindleDataBuilder) -> Self {
+        Self { task, entry, blocks: SmallVec::new() }
+    }
 }
 
 fn cleanup_blocks(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
@@ -181,7 +188,7 @@ pub struct TaskInfo {
 impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     /// Find the parent task of `task`, panicking if `task` is an invalid index
     /// or the task has no parent.
-    pub fn expect_parent_task(&self, task: Task) -> Task {
+    fn expect_parent_task(&self, task: Task) -> Task {
         self.tasks[task].parent.expect("expected task to have parent!")
     }
 
@@ -419,11 +426,9 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
         block_spindles: &IndexSlice<BasicBlock, Option<Spindle>>,
     ) -> IndexVec<Spindle, SpindleData> {
         let mut new_spindles = IndexVec::from_fn_n(
-            |i| {
-                let SpindleDataBuilder { task, entry } = &spindles[i];
-                // We'll add the entry block to blocks later.
-                SpindleData { task: *task, entry: *entry, blocks: SmallVec::new() }
-            },
+            |i|
+                // We'll add the entry block and initialize blocks later.
+                SpindleData::from(spindles[i]),
             spindles.len(),
         );
         for (block, spindle) in block_spindles
@@ -461,7 +466,7 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
         assert_eq!(spindle_blocks, seen);
     }
 
-    //  Convert the [TaskInfoBuilder] into a [TaskInfo].
+    /// Validate this [TaskInfoBuilder] and construct a [TaskInfo] from it.
     pub fn build(self, basic_block_count: usize) -> TaskInfo {
         let Self {
             body,
