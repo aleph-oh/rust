@@ -5,6 +5,7 @@
 mod borrowed_locals;
 mod initialized;
 mod liveness;
+mod logically_parallel_tasks;
 mod storage_liveness;
 
 pub use self::borrowed_locals::borrowed_locals;
