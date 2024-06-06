@@ -485,7 +485,7 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
             block_tasks: _,
             block_spindles,
             unwind_subgraph,
-            cleanup_blocks,
+            cleanup_blocks: _,
         } = self;
 
         let num_tasks = tasks.len();
@@ -568,5 +568,9 @@ impl TaskInfo {
     /// Build a [TaskInfo] from the given [mir::Body].
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         TaskInfoBuilder::from_body(body).build(body.basic_blocks.len())
+    }
+
+    pub fn num_tasks(&self) -> usize {
+        self.tasks.len()
     }
 }
