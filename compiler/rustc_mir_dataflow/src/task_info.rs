@@ -84,6 +84,7 @@ impl TaskDataBuilder {
     }
 }
 
+/// Whether a task is the root task of the function or a descendant of the root task.
 pub enum TaskKind {
     Root,
     Child { parent: Task, last_location: Location },
@@ -101,6 +102,8 @@ impl TaskKind {
     }
 }
 
+/// The data associated with a task, including which spindles compose it and information
+/// about the relationship of this task to other tasks.
 pub struct TaskData {
     /// The spindles in this task.
     pub spindles: BitSet<Spindle>,
@@ -116,7 +119,9 @@ struct SpindleDataBuilder {
     entry: BasicBlock,
 }
 
-struct SpindleData {
+/// The data associated with a spindle, including which basic blocks it contains, the entry,
+/// and which task the spindle belongs to.
+pub struct SpindleData {
     task: Task,
     entry: BasicBlock,
     blocks: SmallVec<[BasicBlock; 2]>,
@@ -166,6 +171,9 @@ fn unwind_subgraph(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
     subgraph
 }
 
+/// A temporary representation of the Tapir tasks and spindles in a function body.
+/// See [TaskInfo] for the finalized representation, stripped of associated state
+/// which is only used during construction.
 struct TaskInfoBuilder<'body, 'tcx> {
     body: &'body mir::Body<'tcx>,
     tasks: IndexVec<Task, TaskDataBuilder>,
@@ -176,6 +184,8 @@ struct TaskInfoBuilder<'body, 'tcx> {
     cleanup_blocks: BitSet<BasicBlock>,
 }
 
+/// [TaskInfo] represents information about a function body's Tapir tasks and spindles
+/// to enable analysis of which tasks are running concurrently with a given basic block.
 pub struct TaskInfo {
     /// Pool of tasks, including associated data.
     tasks: IndexVec<Task, TaskData>,
@@ -555,6 +565,7 @@ impl TaskInfo {
         self.tasks[task].children.iter()
     }
 
+    /// Build a [TaskInfo] from the given [mir::Body].
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         TaskInfoBuilder::from_body(body).build(body.basic_blocks.len())
     }
