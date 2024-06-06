@@ -2,6 +2,7 @@ use std::collections::hash_map::Entry;
 
 use rustc_data_structures::work_queue::WorkQueue;
 use rustc_data_structures::{fx::FxHashMap, sync::HashMapExt};
+use rustc_index::IndexSlice;
 use rustc_index::{bit_set::BitSet, IndexVec};
 use rustc_middle::mir::{self, BasicBlock, Location};
 use smallvec::SmallVec;
@@ -109,8 +110,15 @@ pub struct TaskData {
     pub kind: TaskKind,
 }
 
+struct SpindleDataBuilder {
+    task: Task,
+    entry: BasicBlock,
+}
+
 struct SpindleData {
     task: Task,
+    entry: BasicBlock,
+    blocks: SmallVec<[BasicBlock; 2]>,
 }
 
 fn cleanup_blocks(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
@@ -151,13 +159,14 @@ fn unwind_subgraph(body: &mir::Body<'_>) -> BitSet<BasicBlock> {
     subgraph
 }
 
-struct TaskInfoBuilder {
+struct TaskInfoBuilder<'body, 'tcx> {
+    body: &'body mir::Body<'tcx>,
     tasks: IndexVec<Task, TaskDataBuilder>,
-    spindles: IndexVec<Spindle, SpindleData>,
+    spindles: IndexVec<Spindle, SpindleDataBuilder>,
     block_tasks: FxHashMap<BasicBlock, Task>,
     block_spindles: FxHashMap<BasicBlock, Spindle>,
-    // TODO(jhilton): move unwind subgraph and cleanup blocks into builder
-    // so we can check the labeling invariant.
+    unwind_subgraph: BitSet<BasicBlock>,
+    cleanup_blocks: BitSet<BasicBlock>,
 }
 
 pub struct TaskInfo {
@@ -169,7 +178,7 @@ pub struct TaskInfo {
     block_spindles: IndexVec<BasicBlock, Option<Spindle>>,
 }
 
-impl TaskInfoBuilder {
+impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     /// Find the parent task of `task`, panicking if `task` is an invalid index
     /// or the task has no parent.
     pub fn expect_parent_task(&self, task: Task) -> Task {
@@ -178,7 +187,7 @@ impl TaskInfoBuilder {
 
     /// Associate a new spindle in `task` with `block`.
     fn associate_new_spindle(&mut self, block: BasicBlock, task: Task) {
-        let spindle = self.spindles.push(SpindleData { task });
+        let spindle = self.spindles.push(SpindleDataBuilder { task, entry: block });
         self.block_spindles.insert_same(block, spindle);
     }
 
@@ -239,7 +248,8 @@ impl TaskInfoBuilder {
         // Make a new spindle if one doesn't already exist.
         // We sometimes need a phi spindle?
         if let Entry::Vacant(e) = self.block_spindles.entry(target) {
-            let new_spindle = self.spindles.push(SpindleData { task: current_task });
+            let new_spindle =
+                self.spindles.push(SpindleDataBuilder { task: current_task, entry: target });
             e.insert(new_spindle);
         }
         // We don't have to do anything for tasks. After a sync, it's still the same task.
@@ -257,19 +267,19 @@ impl TaskInfoBuilder {
     }
 
     /// Construct a [TaskInfoBuilder] from `body`.
-    pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
+    pub fn from_body(body: &'body mir::Body<'tcx>) -> Self {
         let mut builder = Self {
+            body,
             tasks: IndexVec::new(),
             spindles: IndexVec::new(),
             block_tasks: FxHashMap::default(),
             block_spindles: FxHashMap::default(),
+            unwind_subgraph: unwind_subgraph(body),
+            cleanup_blocks: cleanup_blocks(body),
         };
 
-        let unwind_subgraph = unwind_subgraph(body);
-        let cleanup_blocks = cleanup_blocks(body);
-
         for (block, block_data) in mir::traversal::preorder(body) {
-            if unwind_subgraph.contains(block) {
+            if builder.unwind_subgraph.contains(block) {
                 continue;
             }
 
@@ -286,7 +296,7 @@ impl TaskInfoBuilder {
                     block_spindles_empty,
                     "expected the first spindle to be the only non-associated spindle!"
                 );
-                builder.spindles.push(SpindleData { task: current_task })
+                builder.spindles.push(SpindleDataBuilder { task: current_task, entry: block })
             });
 
             let location = Location { block, statement_index: block_data.statements.len() };
@@ -310,7 +320,7 @@ impl TaskInfoBuilder {
 
                 _ => {
                     terminator.successors().for_each(|t| {
-                        if !cleanup_blocks.contains(t) {
+                        if !builder.cleanup_blocks.contains(t) {
                             // Same spindle, same task.
                             builder.label_block_task(block, current_task);
                             builder.label_block_spindle(block, current_spindle);
@@ -385,9 +395,83 @@ impl TaskInfoBuilder {
         block_spindles
     }
 
+    fn validate_unwind_subgraph_spindles(
+        block_spindles: &IndexSlice<BasicBlock, Option<Spindle>>,
+        unwind_subgraph: &BitSet<BasicBlock>,
+    ) {
+        for (block, spindle) in block_spindles.iter_enumerated() {
+            assert!(
+                spindle.is_some() || unwind_subgraph.contains(block),
+                "only blocks in the unwind subgraph should have no spindle!"
+            );
+        }
+
+        for block in unwind_subgraph.iter() {
+            assert!(
+                block_spindles[block].is_none(),
+                "all blocks in unwind subgraph should have no spindle!"
+            );
+        }
+    }
+
+    fn convert_spindles(
+        spindles: &IndexSlice<Spindle, SpindleDataBuilder>,
+        block_spindles: &IndexSlice<BasicBlock, Option<Spindle>>,
+    ) -> IndexVec<Spindle, SpindleData> {
+        let mut new_spindles = IndexVec::from_fn_n(
+            |i| {
+                let SpindleDataBuilder { task, entry } = &spindles[i];
+                // We'll add the entry block to blocks later.
+                SpindleData { task: *task, entry: *entry, blocks: SmallVec::new() }
+            },
+            spindles.len(),
+        );
+        for (block, spindle) in block_spindles
+            .iter_enumerated()
+            .filter_map(|(block, spindle)| spindle.map(|spindle| (block, spindle)))
+        {
+            new_spindles[spindle].blocks.push(block);
+        }
+        new_spindles
+    }
+
+    fn validate_spindle_connected(body: &'body mir::Body<'tcx>, spindle: &SpindleData) {
+        let mut queue = WorkQueue::with_none(body.basic_blocks.len());
+        let mut seen = BitSet::new_empty(body.basic_blocks.len());
+        let spindle_blocks = {
+            let mut spindle_blocks = BitSet::new_empty(body.basic_blocks.len());
+            for block in &spindle.blocks {
+                spindle_blocks.insert(*block);
+            }
+            spindle_blocks
+        };
+
+        queue.insert(spindle.entry);
+        while let Some(block) = queue.pop() {
+            seen.insert(block);
+            // Now we want to add all edges from this block that are part of the spindle.
+            for target in body.basic_blocks[block].terminator().successors() {
+                if spindle_blocks.contains(target) && !seen.contains(target) {
+                    queue.insert(target);
+                }
+            }
+        }
+
+        // Now, the seen set should exactly match the spindle blocks.
+        assert_eq!(spindle_blocks, seen);
+    }
+
     //  Convert the [TaskInfoBuilder] into a [TaskInfo].
     pub fn build(self, basic_block_count: usize) -> TaskInfo {
-        let Self { tasks, spindles, block_tasks: _, block_spindles } = self;
+        let Self {
+            body,
+            tasks,
+            spindles,
+            block_tasks: _,
+            block_spindles,
+            unwind_subgraph,
+            cleanup_blocks,
+        } = self;
 
         let num_tasks = tasks.len();
         let tasks: IndexVec<Task, TaskData> = tasks
@@ -402,6 +486,8 @@ impl TaskInfoBuilder {
         let block_spindles =
             TaskInfoBuilder::convert_block_spindles(&block_spindles, basic_block_count);
 
+        let spindles = TaskInfoBuilder::convert_spindles(&spindles, &block_spindles);
+
         let task_info = TaskInfo { tasks, spindles, block_spindles };
         // Domain sizes should agree with IndexVec sizes.
         TaskInfoBuilder::validate_domain_sizes(&task_info);
@@ -412,6 +498,18 @@ impl TaskInfoBuilder {
         // Parent-child relationships should agree within tasks.
         for task in task_info.tasks.indices() {
             TaskInfoBuilder::validate_parent_child_relationship(&task_info, task);
+        }
+
+        // Every block should have some spindle unless it's in the unwind subgraph,
+        // and all blocks in the unwind subgraph should have no spindle.
+        TaskInfoBuilder::validate_unwind_subgraph_spindles(
+            &task_info.block_spindles,
+            &unwind_subgraph,
+        );
+
+        // Check that all spindles are connected.
+        for spindle in &task_info.spindles {
+            TaskInfoBuilder::validate_spindle_connected(body, spindle);
         }
 
         task_info
