@@ -1,3 +1,14 @@
+//! This module defines analyses for which tasks will be waited for at a sync.
+//!
+//! It offers two levels of abstraction: the dataflow analysis itself, through structs like
+//! [DefinitelySyncableTasks] and [MaybeSyncableTasks], and a mapping from syncs to the tasks
+//! which are waited for at the sync, through the functions [definitely_synced_tasks]
+//! and [maybe_synced_tasks], and their corresponding returned structs.
+//!
+//! Use the latter if you don't need to know anything other than which tasks are waited for
+//! at a sync, and use the former for cases where you need additional information the analysis
+//! can provide (such as dataflow state at locations other than syncs).
+
 use rustc_data_structures::fx::FxHashMap;
 use rustc_index::bit_set::BitSet;
 use rustc_middle::mir;
@@ -358,6 +369,7 @@ impl DefinitelySyncedTasks {
 
 /// Find the tasks which must be waited for at each sync in `body`
 /// where `task_info` is a [TaskInfo] constructed from analyzing `body`.
+#[allow(unused)]
 pub fn definitely_synced_tasks<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mir::Body<'tcx>,
@@ -394,6 +406,7 @@ impl MaybeSyncedTasks {
 
 /// Find the tasks which may be waited for at each sync in `body`
 /// where `task_info` is a [TaskInfo] constructed from analyzing `body`.
+#[allow(unused)]
 pub fn maybe_synced_tasks<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mir::Body<'tcx>,

@@ -544,8 +544,19 @@ impl TaskInfo {
 
     /// Find the parent task of `task`, panicking if `task` is an invalid index
     /// or the task has no parent.
+    #[allow(unused)]
     pub fn expect_parent_task(&self, task: Task) -> Task {
         self.tasks[task].kind.parent().expect("expected task to have parent, but was root!")
+    }
+
+    /// Find the [Location] where `task` reattaches to its parent, panicking if
+    /// `task` is an invalid index or the task is the root task.
+    #[allow(unused)]
+    pub fn expect_last_location(&self, task: Task) -> Location {
+        self.tasks[task]
+            .kind
+            .last_location()
+            .expect("expected task to have last location, but was root!")
     }
 
     /// Find the spindle associated with `block`, panicking if there is no such spindle.
@@ -565,11 +576,13 @@ impl TaskInfo {
 
     // Should be fine to only sync children in terms of dataflow state to restore?
     // So maybe we don't need descendants?
+    #[allow(unused)]
     pub fn children(&self, task: Task) -> impl Iterator<Item = Task> + '_ {
         self.tasks[task].children.iter()
     }
 
     /// Build a [TaskInfo] from the given [mir::Body].
+    #[allow(unused)]
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         TaskInfoBuilder::from_body(body).build(body.basic_blocks.len())
     }
