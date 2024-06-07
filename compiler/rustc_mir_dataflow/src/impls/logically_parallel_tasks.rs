@@ -17,11 +17,11 @@ use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 ///
 /// This analysis is also a "may" analysis in that if a task is conditionally spawned, the task
 /// is considered to be logically in parallel at program points that are dominated by the condition.
-struct LogicallyParallelTasks {
-    task_info: TaskInfo,
+struct LogicallyParallelTasks<'task_info> {
+    task_info: &'task_info TaskInfo,
 }
 
-impl<'tcx> AnalysisDomain<'tcx> for LogicallyParallelTasks {
+impl<'tcx, 'task_info> AnalysisDomain<'tcx> for LogicallyParallelTasks<'task_info> {
     // No Dual => join operator is union.
     // This makes sense because this is a "may" anaylsis.
     type Domain = BitSet<Task>;
@@ -43,7 +43,7 @@ impl<'tcx> AnalysisDomain<'tcx> for LogicallyParallelTasks {
     }
 }
 
-impl<'tcx> GenKillAnalysis<'tcx> for LogicallyParallelTasks {
+impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for LogicallyParallelTasks<'task_info> {
     type Idx = Task;
 
     fn domain_size(&self, body: &rustc_middle::mir::Body<'tcx>) -> usize {

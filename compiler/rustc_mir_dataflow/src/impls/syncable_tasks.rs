@@ -29,12 +29,12 @@ use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 /// to visit the basic blocks in a pre-order traversal, which means that the reattach
 /// with an edge to the continuation header will be visited immediately before the
 /// continuation header by construction.
-struct DefinitelySyncableTasks {
-    task_info: TaskInfo,
+struct DefinitelySyncableTasks<'task_info> {
+    task_info: &'task_info TaskInfo,
     saved_reattach_state: Option<(mir::BasicBlock, Dual<BitSet<Task>>)>,
 }
 
-impl DefinitelySyncableTasks {
+impl<'task_info> DefinitelySyncableTasks<'task_info> {
     fn cache_reattach_state(&mut self, block: mir::BasicBlock, output_state: Dual<BitSet<Task>>) {
         assert!(
             self.saved_reattach_state.is_none(),
@@ -75,7 +75,7 @@ impl DefinitelySyncableTasks {
     }
 }
 
-impl<'tcx> AnalysisDomain<'tcx> for DefinitelySyncableTasks {
+impl<'tcx, 'task_info> AnalysisDomain<'tcx> for DefinitelySyncableTasks<'task_info> {
     type Domain = Dual<BitSet<Task>>;
     type Direction = Forward;
 
@@ -91,7 +91,7 @@ impl<'tcx> AnalysisDomain<'tcx> for DefinitelySyncableTasks {
     }
 }
 
-impl<'tcx> GenKillAnalysis<'tcx> for DefinitelySyncableTasks {
+impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for DefinitelySyncableTasks<'task_info> {
     type Idx = Task;
 
     fn domain_size(&self, _body: &mir::Body<'tcx>) -> usize {
@@ -156,11 +156,11 @@ impl<'tcx> GenKillAnalysis<'tcx> for DefinitelySyncableTasks {
 ///
 /// This analysis is a "may" analysis: any given task which is stated as "maybe syncable"
 /// might be logically in parallel with the current program point.
-struct MaybeSyncableTasks {
-    task_info: TaskInfo,
+struct MaybeSyncableTasks<'task_info> {
+    task_info: &'task_info TaskInfo,
 }
 
-impl<'tcx> AnalysisDomain<'tcx> for MaybeSyncableTasks {
+impl<'tcx, 'task_info> AnalysisDomain<'tcx> for MaybeSyncableTasks<'task_info> {
     type Domain = BitSet<Task>;
 
     type Direction = Forward;
@@ -176,7 +176,7 @@ impl<'tcx> AnalysisDomain<'tcx> for MaybeSyncableTasks {
     }
 }
 
-impl<'tcx> GenKillAnalysis<'tcx> for MaybeSyncableTasks {
+impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for MaybeSyncableTasks<'task_info> {
     type Idx = Task;
 
     fn domain_size(&self, _body: &mir::Body<'tcx>) -> usize {
