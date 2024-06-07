@@ -5,6 +5,30 @@ use crate::lattice::Dual;
 use crate::task_info::{Task, TaskInfo};
 use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 
+/// An analysis of which tasks can be definitely synced at any given program point.
+/// The terminators of interest here are, similar to LogicallyParallelTasks,
+/// Detach, Reattach, and Sync, since no other statement or terminator can spawn
+/// or stop a task.
+///
+/// This analysis is usable for determining whether dataflow state should be merged
+/// at a given sync.
+///
+/// This analyis is a "must" analysis: any given task which is stated as "definitely
+/// syncable" must be logically in parallel with the current program point.
+///
+/// [saved_reattach_state] is part of a hacky solution to the problem of only having
+/// one join operator. Since at, say, a SwitchInt terminator where all arms enter
+/// the same basic block, we want to only consider tasks syncable if they're syncable
+/// in all branches, we need intersection as the joining operator. However, this means
+/// that for the continuation header after a detach, which has an edge from the detach
+/// and from the reattach of the spawned task, the dataflow state will just be the state
+/// from the detach. The state from the detach will be a subset of the state from the
+/// reattach, so intersection always gives the state from the detach. Our solution for
+/// this is to cache the reattach state before the continuation header is visited and
+/// union with the cached state. This only works because a forward dataflow analysis needs
+/// to visit the basic blocks in a pre-order traversal, which means that the reattach
+/// with an edge to the continuation header will be visited immediately before the
+/// continuation header by construction.
 struct DefinitelySyncableTasks {
     task_info: TaskInfo,
     saved_reattach_state: Option<(mir::BasicBlock, Dual<BitSet<Task>>)>,
