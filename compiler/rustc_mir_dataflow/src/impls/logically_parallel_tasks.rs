@@ -67,6 +67,8 @@ impl<'tcx> GenKillAnalysis<'tcx> for LogicallyParallelTasks {
         return_places: mir::CallReturnPlaces<'_, 'tcx>,
     ) {
         // Nothing here since returning doesn't affect the currently-parallel task set.
+        // Terminator handling should still run in addition to this function since this
+        // function just corresponds to a successfuly return.
     }
 
     fn terminator_effect<'mir>(
