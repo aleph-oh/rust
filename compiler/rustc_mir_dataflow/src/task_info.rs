@@ -7,10 +7,14 @@ use rustc_index::{bit_set::BitSet, IndexVec};
 use rustc_middle::mir::{self, BasicBlock, Location};
 use smallvec::SmallVec;
 
+use crate::fmt::DebugWithContext;
+
 rustc_index::newtype_index! {
     #[debug_format = "t({})"]
     pub struct Task {}
 }
+
+impl<C> DebugWithContext<C> for Task {}
 
 rustc_index::newtype_index! {
     #[debug_format = "sp({})"]
