@@ -215,7 +215,7 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for MaybeSyncableTasks<'task_info> 
         _block: mir::BasicBlock,
         _return_places: mir::CallReturnPlaces<'_, 'tcx>,
     ) {
-        // See [DefinitelySyncedTasks::call_return_effect] for why this is empty.
+        // See [DefinitelySyncableTasks::call_return_effect] for why this is empty.
     }
 
     fn terminator_effect<'mir>(
