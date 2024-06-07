@@ -11,73 +11,6 @@ use crate::lattice::Dual;
 use crate::task_info::{Task, TaskInfo};
 use crate::{Analysis, AnalysisDomain, Forward, GenKill, GenKillAnalysis, Results, ResultsCursor};
 
-trait EnumeratedBlockIter<'mir, 'tcx> =
-    Iterator<Item = (mir::BasicBlock, &'mir mir::BasicBlockData<'tcx>)> + 'mir where 'tcx: 'mir;
-
-/// An iterator over the syncs within the blocks being iterated over by `iter`.
-struct SyncsIter<I> {
-    /// An iterator over a [mir::Body]'s basic blocks, enumerated.
-    iter: I,
-}
-
-impl<'mir, 'tcx, I> Iterator for SyncsIter<I>
-where
-    'tcx: 'mir,
-    I: EnumeratedBlockIter<'mir, 'tcx>,
-{
-    type Item = mir::Location;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().and_then(|(block, block_data)| {
-            let ends_in_sync =
-                matches!(block_data.terminator().kind, mir::TerminatorKind::Sync { .. });
-            ends_in_sync
-                .then(|| mir::Location { block, statement_index: block_data.statements.len() })
-        })
-    }
-}
-
-struct SyncedTasksIter<'cursor, 'mir, 'tcx, A: Analysis<'tcx>, F, I> {
-    syncs: SyncsIter<I>,
-    cursor: &'cursor mut ResultsCursor<'mir, 'tcx, A>,
-    merge: F,
-}
-
-impl<'cursor, 'mir, 'tcx, A, F, I> Iterator for SyncedTasksIter<'cursor, 'mir, 'tcx, A, F, I>
-where
-    A: Analysis<'tcx>,
-    A::Domain: Clone,
-    F: FnMut(A::Domain, &A::Domain) -> BitSet<Task> + 'static,
-    I: EnumeratedBlockIter<'mir, 'tcx>,
-{
-    type Item = (mir::Location, BitSet<Task>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.syncs.next().map(|location| {
-            self.cursor.seek_before_primary_effect(location);
-            let before_state = self.cursor.get().clone();
-            self.cursor.seek_after_primary_effect(location);
-            let after_state = self.cursor.get();
-            (location, (self.merge)(before_state, &after_state))
-        })
-    }
-}
-
-fn synced_tasks<'mir, 'tcx, 'cursor, A, F, I>(
-    iter: I,
-    cursor: &'cursor mut ResultsCursor<'mir, 'tcx, A>,
-    merge: F,
-) -> SyncedTasksIter<'cursor, 'mir, 'tcx, A, F, I>
-where
-    'mir: 'cursor,
-    A: Analysis<'tcx>,
-    A::Domain: Clone,
-    F: FnMut(A::Domain, &A::Domain) -> BitSet<Task> + 'static,
-    I: EnumeratedBlockIter<'mir, 'tcx>,
-{
-    SyncedTasksIter { syncs: SyncsIter { iter }, cursor, merge }
-}
-
 /// An analysis of which tasks can be definitely synced at any given program point.
 /// The terminators of interest here are, similar to LogicallyParallelTasks,
 /// Detach, Reattach, and Sync, since no other statement or terminator can spawn
@@ -221,94 +154,6 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for DefinitelySyncableTasks<'task_i
     }
 }
 
-pub struct DefinitelySyncedTasks {
-    pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
-}
-
-fn run_analysis<'tcx, A>(
-    analysis: A,
-    pass_name: Option<&'static str>,
-    tcx: TyCtxt<'tcx>,
-    body: &mir::Body<'tcx>,
-) -> Results<'tcx, A>
-where
-    A: Analysis<'tcx>,
-    A::Domain: DebugWithContext<A>,
-{
-    let mut engine = analysis.into_engine(tcx, body);
-    if let Some(pass_name) = pass_name {
-        engine = engine.pass_name(pass_name);
-    }
-
-    engine.iterate_to_fixpoint()
-}
-
-impl DefinitelySyncedTasks {
-    pub fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
-        let mut cursor = run_analysis(
-            DefinitelySyncableTasks { task_info, saved_reattach_state: None },
-            Some("definitely_synced_tasks"),
-            tcx,
-            body,
-        )
-        .into_results_cursor(body);
-
-        let synced_tasks =
-            synced_tasks(body.basic_blocks.iter_enumerated(), &mut cursor, |mut before, after| {
-                before.0.subtract(&after.0);
-                before.0
-            })
-            .map(|(location, tasks)| {
-                let tasks: SmallVec<[Task; 2]> = tasks.iter().collect();
-                (location, tasks)
-            })
-            .collect();
-
-        Self { synced_tasks }
-    }
-}
-
-pub fn definitely_synced_tasks<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &mir::Body<'tcx>,
-    task_info: &TaskInfo,
-) -> DefinitelySyncedTasks {
-    DefinitelySyncedTasks::new(tcx, body, task_info)
-}
-
-pub struct MaybeSyncedTasks {
-    pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
-}
-
-impl MaybeSyncedTasks {
-    pub fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
-        let mut cursor =
-            run_analysis(MaybeSyncableTasks { task_info }, Some("maybe_synced_tasks"), tcx, body)
-                .into_results_cursor(body);
-
-        let synced_tasks =
-            synced_tasks(body.basic_blocks.iter_enumerated(), &mut cursor, |mut before, after| {
-                before.subtract(after);
-                before
-            })
-            .map(|(location, tasks)| {
-                let tasks: SmallVec<[Task; 2]> = tasks.iter().collect();
-                (location, tasks)
-            })
-            .collect();
-
-        Self { synced_tasks }
-    }
-}
-
-pub fn maybe_synced_tasks<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &mir::Body<'tcx>,
-    task_info: &'tcx TaskInfo,
-) -> MaybeSyncedTasks {
-    MaybeSyncedTasks::new(tcx, body, task_info)
-}
-
 /// An analysis of which tasks may be able to be synced at a given program point.
 /// The terminators of interest here are the same as [DefinitelySyncableTasks].
 ///
@@ -386,4 +231,173 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for MaybeSyncableTasks<'task_info> 
 
         terminator.edges()
     }
+}
+
+/// Run `analysis`, naming it `pass_name` if `pass_name` is not `None`, on `body` with `tcx`.
+/// Returns the result of `analysis` converging to fixpoint.
+fn run_analysis<'tcx, A>(
+    analysis: A,
+    pass_name: Option<&'static str>,
+    tcx: TyCtxt<'tcx>,
+    body: &mir::Body<'tcx>,
+) -> Results<'tcx, A>
+where
+    A: Analysis<'tcx>,
+    A::Domain: DebugWithContext<A>,
+{
+    let mut engine = analysis.into_engine(tcx, body);
+    if let Some(pass_name) = pass_name {
+        engine = engine.pass_name(pass_name);
+    }
+
+    engine.iterate_to_fixpoint()
+}
+
+/// An iterator over basic blocks along with the attached data.
+trait EnumeratedBlockIter<'mir, 'tcx> =
+    Iterator<Item = (mir::BasicBlock, &'mir mir::BasicBlockData<'tcx>)> + 'mir where 'tcx: 'mir;
+
+/// An iterator over the syncs within the blocks being iterated over by `iter`.
+struct SyncsIter<I> {
+    /// An iterator over a [mir::Body]'s basic blocks, enumerated.
+    iter: I,
+}
+
+impl<'mir, 'tcx, I> Iterator for SyncsIter<I>
+where
+    'tcx: 'mir,
+    I: EnumeratedBlockIter<'mir, 'tcx>,
+{
+    type Item = mir::Location;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().and_then(|(block, block_data)| {
+            let ends_in_sync =
+                matches!(block_data.terminator().kind, mir::TerminatorKind::Sync { .. });
+            ends_in_sync
+                .then(|| mir::Location { block, statement_index: block_data.statements.len() })
+        })
+    }
+}
+
+/// An iterator over the syncs iterated over by `iter` and the corresponding tasks
+/// which are waited for at those syncs.
+struct SyncedTasksIter<'cursor, 'mir, 'tcx, A: Analysis<'tcx>, F, I> {
+    syncs: SyncsIter<I>,
+    cursor: &'cursor mut ResultsCursor<'mir, 'tcx, A>,
+    merge: F,
+}
+
+impl<'cursor, 'mir, 'tcx, A, F, I> Iterator for SyncedTasksIter<'cursor, 'mir, 'tcx, A, F, I>
+where
+    A: Analysis<'tcx>,
+    A::Domain: Clone,
+    F: FnMut(A::Domain, &A::Domain) -> BitSet<Task> + 'static,
+    I: EnumeratedBlockIter<'mir, 'tcx>,
+{
+    type Item = (mir::Location, BitSet<Task>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.syncs.next().map(|location| {
+            self.cursor.seek_before_primary_effect(location);
+            let before_state = self.cursor.get().clone();
+            self.cursor.seek_after_primary_effect(location);
+            let after_state = self.cursor.get();
+            (location, (self.merge)(before_state, &after_state))
+        })
+    }
+}
+
+/// Find the syncs in `body` and the tasks waited for at those syncs, where
+/// `cursor` visits some dataflow analysis results and `merge` indicates how to
+/// compute the tasks waited for at a sync given the dataflow state before and
+/// after the sync.
+fn synced_tasks_for_body<'cursor, 'mir, 'tcx, A, F>(
+    body: &'mir mir::Body<'tcx>,
+    cursor: &'cursor mut ResultsCursor<'mir, 'tcx, A>,
+    merge: F,
+) -> SyncedTasksIter<'cursor, 'mir, 'tcx, A, F, impl EnumeratedBlockIter<'mir, 'tcx>>
+where
+    A: Analysis<'tcx>,
+    A::Domain: Clone,
+    F: FnMut(A::Domain, &A::Domain) -> BitSet<Task> + 'static,
+{
+    let syncs = SyncsIter { iter: body.basic_blocks.iter_enumerated() };
+    SyncedTasksIter { syncs, cursor, merge }
+}
+
+/// A mapping from locations corresponding to syncs in a body to the tasks
+/// which must be waited for at those syncs.
+pub struct DefinitelySyncedTasks {
+    pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
+}
+
+impl DefinitelySyncedTasks {
+    fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
+        let mut cursor = run_analysis(
+            DefinitelySyncableTasks { task_info, saved_reattach_state: None },
+            Some("definitely_synced_tasks"),
+            tcx,
+            body,
+        )
+        .into_results_cursor(body);
+
+        let synced_tasks = synced_tasks_for_body(body, &mut cursor, |mut before, after| {
+            before.0.subtract(&after.0);
+            before.0
+        })
+        .map(|(location, tasks)| {
+            let tasks: SmallVec<[Task; 2]> = tasks.iter().collect();
+            (location, tasks)
+        })
+        .collect();
+
+        Self { synced_tasks }
+    }
+}
+
+/// Find the tasks which must be waited for at each sync in `body`
+/// where `task_info` is a [TaskInfo] constructed from analyzing `body`.
+pub fn definitely_synced_tasks<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mir::Body<'tcx>,
+    task_info: &TaskInfo,
+) -> DefinitelySyncedTasks {
+    DefinitelySyncedTasks::new(tcx, body, task_info)
+}
+
+/// A mapping from locations corresponding to syncs in a body to the tasks
+/// which may be waited for at those syncs.
+pub struct MaybeSyncedTasks {
+    pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
+}
+
+impl MaybeSyncedTasks {
+    fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
+        let mut cursor =
+            run_analysis(MaybeSyncableTasks { task_info }, Some("maybe_synced_tasks"), tcx, body)
+                .into_results_cursor(body);
+
+        let synced_tasks = synced_tasks_for_body(body, &mut cursor, |mut before, after| {
+            before.subtract(after);
+            before
+        })
+        .map(|(location, tasks)| {
+            let tasks: SmallVec<[Task; 2]> = tasks.iter().collect();
+            (location, tasks)
+        })
+        .collect();
+
+        Self { synced_tasks }
+    }
+}
+
+/// Find the tasks which may be waited for at each sync in `body`
+/// where `task_info` is a [TaskInfo] constructed from analyzing `body`.
+pub fn maybe_synced_tasks<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mir::Body<'tcx>,
+    task_info: &'tcx TaskInfo,
+) -> MaybeSyncedTasks {
+    MaybeSyncedTasks::new(tcx, body, task_info)
 }
