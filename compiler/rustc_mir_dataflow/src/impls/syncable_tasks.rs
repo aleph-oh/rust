@@ -225,11 +225,11 @@ pub struct DefinitelySyncedTasks {
     pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
 }
 
-fn run_analysis<'mir, 'tcx, A>(
+fn run_analysis<'tcx, A>(
     analysis: A,
     pass_name: Option<&'static str>,
     tcx: TyCtxt<'tcx>,
-    body: &'mir mir::Body<'tcx>,
+    body: &mir::Body<'tcx>,
 ) -> Results<'tcx, A>
 where
     A: Analysis<'tcx>,
@@ -244,11 +244,7 @@ where
 }
 
 impl DefinitelySyncedTasks {
-    pub fn new<'mir, 'tcx>(
-        tcx: TyCtxt<'tcx>,
-        body: &'mir mir::Body<'tcx>,
-        task_info: &'tcx TaskInfo,
-    ) -> Self {
+    pub fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
         let mut cursor = run_analysis(
             DefinitelySyncableTasks { task_info, saved_reattach_state: None },
             Some("definitely_synced_tasks"),
@@ -272,22 +268,23 @@ impl DefinitelySyncedTasks {
     }
 }
 
+pub fn definitely_synced_tasks<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mir::Body<'tcx>,
+    task_info: &TaskInfo,
+) -> DefinitelySyncedTasks {
+    DefinitelySyncedTasks::new(tcx, body, task_info)
+}
+
 pub struct MaybeSyncedTasks {
     pub synced_tasks: FxHashMap<mir::Location, SmallVec<[Task; 2]>>,
 }
 
 impl MaybeSyncedTasks {
-    pub fn new<'tcx>(
-        tcx: TyCtxt<'tcx>,
-        body: &'tcx mir::Body<'tcx>,
-        task_info: &'tcx TaskInfo,
-    ) -> Self {
-        // First, run the analysis.
-        let mut cursor = MaybeSyncableTasks { task_info }
-            .into_engine(tcx, body)
-            .pass_name("maybe_synced_tasks")
-            .iterate_to_fixpoint()
-            .into_results_cursor(body);
+    pub fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
+        let mut cursor =
+            run_analysis(MaybeSyncableTasks { task_info }, Some("maybe_synced_tasks"), tcx, body)
+                .into_results_cursor(body);
 
         let synced_tasks =
             synced_tasks(body.basic_blocks.iter_enumerated(), &mut cursor, |mut before, after| {
@@ -302,6 +299,14 @@ impl MaybeSyncedTasks {
 
         Self { synced_tasks }
     }
+}
+
+pub fn maybe_synced_tasks<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mir::Body<'tcx>,
+    task_info: &'tcx TaskInfo,
+) -> MaybeSyncedTasks {
+    MaybeSyncedTasks::new(tcx, body, task_info)
 }
 
 /// An analysis of which tasks may be able to be synced at a given program point.
