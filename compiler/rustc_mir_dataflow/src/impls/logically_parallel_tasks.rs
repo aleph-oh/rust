@@ -15,13 +15,15 @@ use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 /// be in parallel rather than just those tasks whose dataflow state should be merged at a
 /// sync.
 ///
-/// This analysis is also a "Maybe" analysis in that if a task is conditionally spawned, the task
+/// This analysis is also a "may" analysis in that if a task is conditionally spawned, the task
 /// is considered to be logically in parallel at program points that are dominated by the condition.
 struct LogicallyParallelTasks {
     task_info: TaskInfo,
 }
 
 impl<'tcx> AnalysisDomain<'tcx> for LogicallyParallelTasks {
+    // No Dual => join operator is union.
+    // This makes sense because this is a "may" anaylsis.
     type Domain = BitSet<Task>;
     type Direction = Forward;
 
