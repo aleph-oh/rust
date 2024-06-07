@@ -29,13 +29,13 @@ impl<'tcx, 'task_info> AnalysisDomain<'tcx> for LogicallyParallelTasks<'task_inf
 
     const NAME: &'static str = "logically_parallel_tasks";
 
-    fn bottom_value(&self, body: &rustc_middle::mir::Body<'tcx>) -> Self::Domain {
+    fn bottom_value(&self, _body: &rustc_middle::mir::Body<'tcx>) -> Self::Domain {
         BitSet::new_empty(self.task_info.num_tasks())
     }
 
     fn initialize_start_block(
         &self,
-        body: &rustc_middle::mir::Body<'tcx>,
+        _body: &rustc_middle::mir::Body<'tcx>,
         state: &mut Self::Domain,
     ) {
         // Task 0 is initially executing at the beginning of the start block.
@@ -46,15 +46,15 @@ impl<'tcx, 'task_info> AnalysisDomain<'tcx> for LogicallyParallelTasks<'task_inf
 impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for LogicallyParallelTasks<'task_info> {
     type Idx = Task;
 
-    fn domain_size(&self, body: &rustc_middle::mir::Body<'tcx>) -> usize {
+    fn domain_size(&self, _body: &rustc_middle::mir::Body<'tcx>) -> usize {
         self.task_info.num_tasks()
     }
 
     fn statement_effect(
         &mut self,
-        trans: &mut impl GenKill<Self::Idx>,
-        statement: &mir::Statement<'tcx>,
-        location: mir::Location,
+        _trans: &mut impl GenKill<Self::Idx>,
+        _statement: &mir::Statement<'tcx>,
+        _location: mir::Location,
     ) {
         // Nothing here since no statement affects the currently-parallel task set,
         // only terminators can do that.
@@ -62,9 +62,9 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for LogicallyParallelTasks<'task_in
 
     fn call_return_effect(
         &mut self,
-        trans: &mut Self::Domain,
-        block: mir::BasicBlock,
-        return_places: mir::CallReturnPlaces<'_, 'tcx>,
+        _trans: &mut Self::Domain,
+        _block: mir::BasicBlock,
+        _return_places: mir::CallReturnPlaces<'_, 'tcx>,
     ) {
         // Nothing here since returning doesn't affect the currently-parallel task set.
         // Terminator handling should still run in addition to this function since this
