@@ -141,9 +141,86 @@ impl<'tcx> GenKillAnalysis<'tcx> for DefinitelySyncableTasks {
             // Remove all descendants from the dataflow state: they'll be synced by
             // this sync.
             let current_task = self.task_info.expect_task(location.block);
-            for descendant in self.task_info.descendants(current_task) {
-                trans.kill(descendant);
-            }
+            trans.kill_all(self.task_info.descendants(current_task));
+        }
+
+        terminator.edges()
+    }
+}
+
+/// An analysis of which tasks may be able to be synced at a given program point.
+/// The terminators of interest here are the same as [DefinitelySyncableTasks].
+///
+/// This analysis is also useful for determining what dataflow state should be
+/// merged at a sync.
+///
+/// This analysis is a "may" analysis: any given task which is stated as "maybe syncable"
+/// might be logically in parallel with the current program point.
+struct MaybeSyncableTasks {
+    task_info: TaskInfo,
+}
+
+impl<'tcx> AnalysisDomain<'tcx> for MaybeSyncableTasks {
+    type Domain = BitSet<Task>;
+
+    type Direction = Forward;
+
+    const NAME: &'static str = "maybe_syncable_tasks";
+
+    fn bottom_value(&self, _body: &mir::Body<'tcx>) -> Self::Domain {
+        BitSet::new_empty(self.task_info.num_tasks())
+    }
+
+    fn initialize_start_block(&self, _body: &mir::Body<'tcx>, state: &mut Self::Domain) {
+        state.gen(Task::from_usize(0))
+    }
+}
+
+impl<'tcx> GenKillAnalysis<'tcx> for MaybeSyncableTasks {
+    type Idx = Task;
+
+    fn domain_size(&self, _body: &mir::Body<'tcx>) -> usize {
+        self.task_info.num_tasks()
+    }
+
+    fn statement_effect(
+        &mut self,
+        trans: &mut impl GenKill<Self::Idx>,
+        statement: &mir::Statement<'tcx>,
+        location: mir::Location,
+    ) {
+        // Nothing to see here: there are no statements that modify task state.
+    }
+
+    fn call_return_effect(
+        &mut self,
+        trans: &mut Self::Domain,
+        block: mir::BasicBlock,
+        return_places: mir::CallReturnPlaces<'_, 'tcx>,
+    ) {
+        // See [DefinitelySyncedTasks::call_return_effect] for why this is empty.
+    }
+
+    fn terminator_effect<'mir>(
+        &mut self,
+        trans: &mut Self::Domain,
+        terminator: &'mir mir::Terminator<'tcx>,
+        location: mir::Location,
+    ) -> mir::TerminatorEdges<'mir, 'tcx> {
+        let kind = &terminator.kind;
+
+        if let mir::TerminatorKind::Detach { spawned_task, continuation } = kind {
+            // Add the spawned task.
+            let spawned_task = self.task_info.expect_task(*spawned_task);
+            trans.gen(spawned_task);
+        } else if let mir::TerminatorKind::Reattach { continuation } = kind {
+            // No-op: don't actually have to do anything for this case
+            // since reattach doesn't change the tasks which might be running
+            // after it.
+        } else if let mir::TerminatorKind::Sync { target } = kind {
+            // Remove any tasks that are descendants of the current task.
+            let current_task = self.task_info.expect_task(location.block);
+            trans.kill_all(self.task_info.descendants(current_task));
         }
 
         terminator.edges()
