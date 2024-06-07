@@ -92,17 +92,13 @@ impl<'tcx> GenKillAnalysis<'tcx> for LogicallyParallelTasks {
             // since the continuation can be executing in parallel with any point in
             // the spawned task.
             let current_task = self.task_info.expect_task(location.block);
-            for descendant in self.task_info.descendants(current_task) {
-                trans.insert(descendant);
-            }
+            trans.gen_all(self.task_info.descendants(current_task));
         } else if let mir::TerminatorKind::Sync { target: _ } = kind {
             // Syncs wait for any descendant of the current task, so
             // none of those descendants can be logically in parallel
             // after the sync.
             let current_task = self.task_info.expect_task(location.block);
-            for descendant in self.task_info.descendants(current_task) {
-                trans.remove(descendant);
-            }
+            trans.kill_all(self.task_info.descendants(current_task));
         }
 
         terminator.edges()
