@@ -29,7 +29,7 @@ use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 /// to visit the basic blocks in a pre-order traversal, which means that the reattach
 /// with an edge to the continuation header will be visited immediately before the
 /// continuation header by construction.
-struct DefinitelySyncableTasks<'task_info> {
+pub struct DefinitelySyncableTasks<'task_info> {
     task_info: &'task_info TaskInfo,
     saved_reattach_state: Option<(mir::BasicBlock, Dual<BitSet<Task>>)>,
 }
@@ -156,7 +156,7 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for DefinitelySyncableTasks<'task_i
 ///
 /// This analysis is a "may" analysis: any given task which is stated as "maybe syncable"
 /// might be logically in parallel with the current program point.
-struct MaybeSyncableTasks<'task_info> {
+pub struct MaybeSyncableTasks<'task_info> {
     task_info: &'task_info TaskInfo,
 }
 

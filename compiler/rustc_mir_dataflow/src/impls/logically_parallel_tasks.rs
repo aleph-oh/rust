@@ -17,7 +17,7 @@ use crate::{AnalysisDomain, Forward, GenKill, GenKillAnalysis};
 ///
 /// This analysis is also a "may" analysis in that if a task is conditionally spawned, the task
 /// is considered to be logically in parallel at program points that are dominated by the condition.
-struct LogicallyParallelTasks<'task_info> {
+pub struct LogicallyParallelTasks<'task_info> {
     task_info: &'task_info TaskInfo,
 }
 
