@@ -117,23 +117,39 @@ pub struct TaskData {
     pub kind: TaskKind,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum SpindleKind {
+    Normal,
+    Phi,
+}
+
+impl SpindleKind {
+    fn is_phi(&self) -> bool {
+        if let SpindleKind::Phi = self { true } else { false }
+    }
+}
+
 #[derive(Copy, Clone)]
 struct SpindleDataBuilder {
     task: Task,
     entry: BasicBlock,
+    kind: SpindleKind,
 }
 
 /// The data associated with a spindle, including which basic blocks it contains, the entry,
 /// and which task the spindle belongs to.
+#[derive(Debug)]
 pub struct SpindleData {
     task: Task,
     entry: BasicBlock,
+    #[allow(dead_code)]
+    kind: SpindleKind,
     blocks: SmallVec<[BasicBlock; 2]>,
 }
 
 impl From<SpindleDataBuilder> for SpindleData {
-    fn from(SpindleDataBuilder { task, entry }: SpindleDataBuilder) -> Self {
-        Self { task, entry, blocks: SmallVec::new() }
+    fn from(SpindleDataBuilder { task, entry, kind }: SpindleDataBuilder) -> Self {
+        Self { task, entry, kind, blocks: SmallVec::new() }
     }
 }
 
@@ -208,8 +224,36 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
 
     /// Associate a new spindle in `task` with `block`.
     fn associate_new_spindle(&mut self, block: BasicBlock, task: Task) {
-        let spindle = self.spindles.push(SpindleDataBuilder { task, entry: block });
-        self.block_spindles.insert_same(block, spindle);
+        self.block_spindles
+            .entry(block)
+            .and_modify(|existing_spindle| {
+                let spindle_data = &self.spindles[*existing_spindle];
+                if !spindle_data.kind.is_phi() {
+                    // This is the case where we have to phi-spindle. I think since this
+                    // is a pre-order traversal we never have to do anything other than label `block`
+                    // with a different spindle: no successor of block should have a spindle deriving from
+                    // the current spindle of `block`.
+                    let existing_spindle_task = spindle_data.task;
+                    let phi_spindle = self.spindles.push(SpindleDataBuilder {
+                        task: existing_spindle_task,
+                        entry: block,
+                        kind: SpindleKind::Phi,
+                    });
+                    // There's an issue here where when a phi spindle replaces the existing spindle, we have
+                    // to recompute the spindles that are after the replaced spindle. By the definition of
+                    // spindles, this is only going to be basic blocks dominated by this spindle, and we can
+                    // probably keep on labeling until we reach a fixpoint.
+                    *existing_spindle = phi_spindle;
+                }
+            })
+            .or_insert_with(|| {
+                let spindle = self.spindles.push(SpindleDataBuilder {
+                    task,
+                    entry: block,
+                    kind: SpindleKind::Normal,
+                });
+                spindle
+            });
     }
 
     /// Label `block` with `task`.
@@ -219,7 +263,33 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
 
     /// Label `block` with `spindle`.
     fn label_block_spindle(&mut self, block: BasicBlock, spindle: Spindle) {
-        self.block_spindles.insert_same(block, spindle);
+        self.block_spindles
+            .entry(block)
+            .and_modify(|existing_spindle| {
+                if *existing_spindle == spindle {
+                    return;
+                }
+
+                let spindle_data = &self.spindles[*existing_spindle];
+                if !spindle_data.kind.is_phi() {
+                    // This is the case where we have to phi-spindle. I think since this
+                    // is a pre-order traversal we never have to do anything other than label `block`
+                    // with a different spindle: no successor of block should have a spindle deriving from
+                    // the current spindle of `block`.
+                    let existing_spindle_task = spindle_data.task;
+                    let phi_spindle = self.spindles.push(SpindleDataBuilder {
+                        task: existing_spindle_task,
+                        entry: block,
+                        kind: SpindleKind::Phi,
+                    });
+                    // There's an issue here where when a phi spindle replaces the existing spindle, we have
+                    // to recompute the spindles that are after the replaced spindle. By the definition of
+                    // spindles, this is only going to be basic blocks dominated by this spindle, and we can
+                    // probably keep on labeling until we reach a fixpoint.
+                    *existing_spindle = phi_spindle;
+                }
+            })
+            .or_insert(spindle);
     }
 
     /// Modify this [TaskInfo] by recording a `Detach` where the current task is `current_task`,
@@ -269,8 +339,11 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
         // Make a new spindle if one doesn't already exist.
         // We sometimes need a phi spindle?
         if let Entry::Vacant(e) = self.block_spindles.entry(target) {
-            let new_spindle =
-                self.spindles.push(SpindleDataBuilder { task: current_task, entry: target });
+            let new_spindle = self.spindles.push(SpindleDataBuilder {
+                task: current_task,
+                entry: target,
+                kind: SpindleKind::Normal,
+            });
             e.insert(new_spindle);
         }
         // We don't have to do anything for tasks. After a sync, it's still the same task.
@@ -288,6 +361,7 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     }
 
     /// Construct a [TaskInfoBuilder] from `body`.
+    #[instrument(level = "debug", skip(body))]
     pub fn from_body(body: &'body mir::Body<'tcx>) -> Self {
         let mut builder = Self {
             body,
@@ -299,14 +373,18 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
             cleanup_blocks: cleanup_blocks(body),
         };
 
-        for (block, block_data) in mir::traversal::preorder(body) {
+        for (block, block_data) in mir::traversal::reverse_postorder(body) {
             if builder.unwind_subgraph.contains(block) {
                 continue;
             }
 
-            let block_tasks_empty = builder.block_tasks.is_empty();
+            let block_tasks_len = builder.block_tasks.len();
             let current_task = *builder.block_tasks.entry(block).or_insert_with(|| {
-                assert!(block_tasks_empty, "expected the first task to be the only orphan task!");
+                assert!(
+                    block_tasks_len == 0,
+                    "expected the first task to be the only orphan task! block_tasks_len = {}",
+                    block_tasks_len
+                );
 
                 builder.tasks.push(TaskDataBuilder::root())
             });
@@ -317,7 +395,11 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
                     block_spindles_empty,
                     "expected the first spindle to be the only non-associated spindle!"
                 );
-                builder.spindles.push(SpindleDataBuilder { task: current_task, entry: block })
+                builder.spindles.push(SpindleDataBuilder {
+                    task: current_task,
+                    entry: block,
+                    kind: SpindleKind::Normal,
+                })
             });
 
             let location = Location { block, statement_index: block_data.statements.len() };
@@ -343,8 +425,8 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
                     terminator.successors().for_each(|t| {
                         if !builder.cleanup_blocks.contains(t) {
                             // Same spindle, same task.
-                            builder.label_block_task(block, current_task);
-                            builder.label_block_spindle(block, current_spindle);
+                            builder.label_block_task(t, current_task);
+                            builder.label_block_spindle(t, current_spindle);
                         }
                     })
                 }
@@ -359,8 +441,13 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     }
 
     fn validate_spindle_bounds(task_info: &TaskInfo) {
-        for spindle in task_info.block_spindles.indices() {
-            assert!(spindle.as_usize() < task_info.spindles.len());
+        for spindle in task_info.block_spindles.iter().copied().filter_map(|spindle| spindle) {
+            assert!(
+                spindle.as_usize() < task_info.spindles.len(),
+                "spindle = {:?} but # spindles = {}",
+                spindle,
+                task_info.spindles.len()
+            );
         }
     }
 
@@ -441,7 +528,7 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     ) -> IndexVec<Spindle, SpindleData> {
         let mut new_spindles = IndexVec::from_fn_n(
             |i|
-                // We'll add the entry block and initialize blocks later.
+                // We'll add the entry block now and initialize blocks later.
                 SpindleData::from(spindles[i]),
             spindles.len(),
         );
@@ -455,6 +542,22 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
     }
 
     fn validate_spindle_connected(body: &'body mir::Body<'tcx>, spindle: &SpindleData) {
+        // HACK(jhilton): this is a way to work around the case where a phi spindle
+        // replaces a normal spindle, leading to no blocks in that spindle, but the
+        // entry still exists. Without this check, the bottom assertion would fail
+        // since the entry would've been visited by the traversal but the spindle
+        // has no blocks. A better solution would remove these unmapped spindles and re-map spindles
+        // into a new IndexVec.
+
+        // Idea: insert phis ahead of time at any basic block with more than one predecessor not in
+        // the unwind subgraph. This seems like it should work, but needlessly adds spindles for loops
+        // where the back edge is part of the same spindle. It's just that most other ways of
+        // creating divergent control flow are mutually exclusive -> can't have more than 1 predecessor
+        // any other way, as far as I can tell.
+        if spindle.blocks.is_empty() {
+            return;
+        }
+
         let mut queue = WorkQueue::with_none(body.basic_blocks.len());
         let mut seen = BitSet::new_empty(body.basic_blocks.len());
         let spindle_blocks = {
@@ -477,10 +580,14 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
         }
 
         // Now, the seen set should exactly match the spindle blocks.
-        assert_eq!(spindle_blocks, seen);
+        assert_eq!(
+            spindle_blocks, seen,
+            "expected blocks in spindle to be same as blocks seen by traversing spindle!"
+        );
     }
 
     /// Validate this [TaskInfoBuilder] and construct a [TaskInfo] from it.
+    #[instrument(level = "debug", skip(self))]
     pub fn build(self, basic_block_count: usize) -> TaskInfo {
         let Self {
             body,
