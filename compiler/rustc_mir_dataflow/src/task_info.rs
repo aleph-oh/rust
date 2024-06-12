@@ -581,7 +581,8 @@ impl<'body, 'tcx> TaskInfoBuilder<'body, 'tcx> {
             // (for the second value of the tuple)
             // [0, 0, 1, 0, 0, 1, 1, 1] -> [0, 0, -1, -1, -1, -2, -3, -4]
             .scan(0isize, |acc, (original_spindle, removed)| {
-                Some((original_spindle, *acc - removed))
+                *acc -= removed;
+                Some((original_spindle, *acc))
             })
             // Now we need to compute the actual indices:
             // [0, 0, -1, -1, -1, -2, -3, -4] -> [0, 1, 1, 2, 3, 3, 3, 3]
