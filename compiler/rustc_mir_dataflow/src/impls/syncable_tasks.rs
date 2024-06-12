@@ -282,7 +282,7 @@ where
     type Item = mir::Location;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().and_then(|(block, block_data)| {
+        self.iter.find_map(|(block, block_data)| {
             let ends_in_sync =
                 matches!(block_data.terminator().kind, mir::TerminatorKind::Sync { .. });
             ends_in_sync
@@ -402,11 +402,14 @@ impl MaybeSyncedTasks {
 
         Self { synced_tasks }
     }
+
+    pub fn synced_tasks_at(&self, location: &mir::Location) -> &SmallVec<[Task; 2]> {
+        self.synced_tasks.get(location).expect("expected location to have synced tasks!")
+    }
 }
 
 /// Find the tasks which may be waited for at each sync in `body`
 /// where `task_info` is a [TaskInfo] constructed from analyzing `body`.
-#[allow(unused)]
 pub fn maybe_synced_tasks<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mir::Body<'tcx>,
