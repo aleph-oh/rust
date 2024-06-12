@@ -410,7 +410,7 @@ impl MaybeSyncedTasks {
 pub fn maybe_synced_tasks<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mir::Body<'tcx>,
-    task_info: &'tcx TaskInfo,
+    task_info: &TaskInfo,
 ) -> MaybeSyncedTasks {
     MaybeSyncedTasks::new(tcx, body, task_info)
 }
