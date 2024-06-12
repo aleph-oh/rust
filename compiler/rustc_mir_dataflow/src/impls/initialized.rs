@@ -8,6 +8,7 @@ use crate::framework::SwitchIntEdgeEffects;
 use crate::mark_cilk_tasks::TaskTree;
 use crate::move_paths::{HasMoveData, InitIndex, InitKind, LookupResult, MoveData, MovePathIndex};
 use crate::on_lookup_result_bits;
+use crate::task_info::TaskInfo;
 use crate::MoveDataParamEnv;
 use crate::{drop_flag_effects, on_all_children_bits};
 use crate::{drop_flag_effects_for_function_entry, mark_cilk_tasks};
@@ -54,6 +55,8 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
     skip_unreachable_unwind: bool,
+    #[allow(unused)]
+    task_info: TaskInfo,
     /// Maps basic blocks to the task they are part of.
     task_tree: TaskTree,
     /// Maps locations to the state of the dataflow analysis at that location. The locations in this
@@ -72,6 +75,7 @@ impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
             body,
             mdpe,
             skip_unreachable_unwind: false,
+            task_info: TaskInfo::from_body(body),
             task_tree: TaskTree::from_body(body),
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
