@@ -15,6 +15,8 @@ use crate::{drop_flag_effects_for_function_entry, mark_cilk_tasks};
 use crate::{drop_flag_effects_for_location, JoinSemiLattice};
 use crate::{lattice, AnalysisDomain, GenKill, GenKillAnalysis, MaybeReachable};
 
+use super::syncable_tasks::{maybe_synced_tasks, MaybeSyncedTasks};
+
 /// `MaybeInitializedPlaces` tracks all places that might be
 /// initialized upon reaching a particular point in the control flow
 /// for a function.
@@ -55,10 +57,11 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
     skip_unreachable_unwind: bool,
-    #[allow(unused)]
+    /// Stores information about tasks: their last locations, the spindles they contain, and their
+    /// parent-child relationships, for example.
     task_info: TaskInfo,
-    /// Maps basic blocks to the task they are part of.
-    task_tree: TaskTree,
+    /// Maps locations to the tasks which may be synced at a given location (must be a sync).
+    maybe_synced_tasks: MaybeSyncedTasks,
     /// Maps locations to the state of the dataflow analysis at that location. The locations in this
     /// map are the last locations of tasks.
     state_at_last_locations: rustc_data_structures::fx::FxHashMap<
@@ -69,14 +72,16 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
 
 impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        // FIXME(jhilton): I don't like that this constructor does non-trivial work. Make the task tree a parameter?
+        // FIXME(jhilton): I don't like that this constructor does non-trivial work. Make the task info a parameter?
+        let task_info = TaskInfo::from_body(body);
+        let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
         MaybeInitializedPlaces {
             tcx,
             body,
             mdpe,
             skip_unreachable_unwind: false,
-            task_info: TaskInfo::from_body(body),
-            task_tree: TaskTree::from_body(body),
+            task_info,
+            maybe_synced_tasks,
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
@@ -426,13 +431,15 @@ impl<'tcx> GenKillAnalysis<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
             self.state_at_last_locations.insert(location, state.clone());
         } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
             // Grab the state at all last locations we could be syncing based on the current basic block.
-            let task = self.task_tree.expect_task(location);
-            // We skip the locations that don't exist because a task can have children which aren't synced at this point in the dataflow analysis, since
-            // they can be successors of this sync. This is because tasks don't end on sync.
-            self.task_tree
-                .descendant_last_locations(task)
-                .filter_map(|last_location| {
-                    self.state_at_last_locations.get(&last_location).cloned()
+            let synced_tasks = self.maybe_synced_tasks.synced_tasks_at(&location);
+            synced_tasks
+                .iter()
+                .map(|task| self.task_info.expect_last_location(*task))
+                .map(|last_location| {
+                    self.state_at_last_locations
+                        .get(&last_location)
+                        .cloned()
+                        .expect("expected location to have saved state!")
                 })
                 .for_each(|state_at_last_location| {
                     // Bottom is uninitialized and top is initialized, and we want to become more initialized, so we go up.
