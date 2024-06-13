@@ -820,21 +820,6 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
                 }
             }
 
-            // FIXME(jhilton): we might need to do something new here since neither Return or Yield
-            // really do the same thing. Any borrows to locals should be invalidated as long as they're
-            // in the same basic block.
-            TerminatorKind::Reattach { continuation: _ } => {
-                // Storage for locals in the current basic block should be dead. This is because
-                // in the continuation we won't be able to use locals from the spawned block.
-                // My only problem here is that we only want to kill locals that were created as part of the
-                // current spindle.
-                let borrow_set = self.borrow_set.clone();
-                for i in flow_state.borrows.iter() {
-                    let borrow = &borrow_set[i];
-                    self.check_for_local_borrow(borrow, span);
-                }
-            }
-
             TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Assert { .. }
             | TerminatorKind::Call { .. }
@@ -847,6 +832,7 @@ impl<'cx, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'cx, 'tcx, R> for MirBorro
             | TerminatorKind::InlineAsm { .. }
             | TerminatorKind::Detach { .. }
             // FIXME(jhilton): think more about this when we're integrating BorrowCk and spawn/sync.
+            | TerminatorKind::Reattach { .. }
             | TerminatorKind::Sync { .. } => {}
         }
     }
@@ -1571,9 +1557,8 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
 
     /// Reports an error if this is a borrow of local data.
     /// This is called for all Yield expressions on movable coroutines
+    #[instrument(level = "debug", skip(self))]
     fn check_for_local_borrow(&mut self, borrow: &BorrowData<'tcx>, yield_span: Span) {
-        debug!("check_for_local_borrow({:?})", borrow);
-
         if borrow_of_local_data(borrow.borrowed_place) {
             let err = self.cannot_borrow_across_coroutine_yield(
                 self.retrieve_borrow_spans(borrow).var_or_use(),
