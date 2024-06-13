@@ -451,11 +451,11 @@ pub enum NonDivergingIntrinsic<'tcx> {
     /// token for use by `tapir_runtime_stop`.
     TapirRuntimeStart,
 
-   /// Denotes a call to the intrinsic function `tapir_runtime_stop`.
-   ///
-   /// Although one value is accepted as a parameter, it won't be observed by any Rust caller
-   /// since it's a token from `tapir_runtime_start`.
-   TapirRuntimeStop,
+    /// Denotes a call to the intrinsic function `tapir_runtime_stop`.
+    ///
+    /// Although one value is accepted as a parameter, it won't be observed by any Rust caller
+    /// since it's a token from `tapir_runtime_start`.
+    TapirRuntimeStop,
 }
 
 /// Describes what kind of retag is to be performed.
