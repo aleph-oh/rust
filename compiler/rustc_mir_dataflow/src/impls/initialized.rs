@@ -4,6 +4,7 @@ use rustc_middle::mir::{self, Body, CallReturnPlaces, Location, TerminatorEdges}
 use rustc_middle::ty::{self, TyCtxt};
 use tracing::instrument;
 
+use crate::drop_flag_effects_for_function_entry;
 use crate::elaborate_drops::DropFlagState;
 use crate::framework::SwitchIntEdgeEffects;
 use crate::mark_cilk_tasks::TaskTree;
@@ -12,7 +13,6 @@ use crate::on_lookup_result_bits;
 use crate::task_info::TaskInfo;
 use crate::MoveDataParamEnv;
 use crate::{drop_flag_effects, on_all_children_bits};
-use crate::{drop_flag_effects_for_function_entry, mark_cilk_tasks};
 use crate::{drop_flag_effects_for_location, JoinSemiLattice};
 use crate::{lattice, AnalysisDomain, GenKill, GenKillAnalysis, MaybeReachable};
 
@@ -249,17 +249,21 @@ impl<'a, 'tcx> HasMoveData<'tcx> for MaybeUninitializedPlaces<'a, 'tcx> {
 pub struct DefinitelyInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
-    task_tree: TaskTree,
+    task_info: TaskInfo,
+    definitely_synced_tasks: DefinitelySyncedTasks,
     state_at_last_locations:
         rustc_data_structures::fx::FxHashMap<Location, lattice::Dual<BitSet<MovePathIndex>>>,
 }
 
 impl<'a, 'tcx> DefinitelyInitializedPlaces<'a, 'tcx> {
-    pub fn new(body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
+    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
+        let task_info = TaskInfo::from_body(body);
+        let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
         DefinitelyInitializedPlaces {
             body,
             mdpe,
-            task_tree: TaskTree::from_body(body),
+            task_info,
+            definitely_synced_tasks,
             state_at_last_locations: rustc_data_structures::fx::FxHashMap::default(),
         }
     }
@@ -693,30 +697,6 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for DefinitelyInitializedPlaces<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> DefinitelyInitializedPlaces<'a, 'tcx> {
-    /// Returns the dataflow state from joining the last locations of a task.
-    fn state_exiting_task(
-        &self,
-        task: mark_cilk_tasks::Task,
-    ) -> <Self as AnalysisDomain<'tcx>>::Domain {
-        // HACK(jhilton): this initialization is the exact same as the one in `bottom_value`. That's pretty terrible
-        // but I don't think a helper function really makes sense, and we can't use `bottom_value` because it expects
-        // a Body.
-        let init = lattice::Dual(BitSet::new_filled(self.move_data().move_paths.len()));
-        self.task_tree
-            .last_locations(task)
-            .filter_map(|location| self.state_at_last_locations.get(&location))
-            .fold(init, |mut acc, state| {
-                // We use join here because we want to merge flow results from multiple paths in the
-                // conventional way. For DefinitelyInitialized, that happens to be intersection by
-                // the definition of the analysis domain, so we're narrowing the set of deifnitely-initialized
-                // variables.
-                acc.join(state);
-                acc
-            })
-    }
-}
-
 impl<'tcx> GenKillAnalysis<'tcx> for DefinitelyInitializedPlaces<'_, 'tcx> {
     type Idx = MovePathIndex;
 
@@ -748,21 +728,23 @@ impl<'tcx> GenKillAnalysis<'tcx> for DefinitelyInitializedPlaces<'_, 'tcx> {
         if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
             self.state_at_last_locations.insert(location, trans.clone());
         } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
-            let task = self.task_tree.expect_task(location);
+            let synced_tasks = self.definitely_synced_tasks.synced_tasks_at(&location);
             // We want to say that a state is definitely initialized if it is definitely initialized in some synced child.
-            // FIXME(jhilton): this is currently inaccurate because we sync locations that we may not have actually reached
-            // in the case of conditional spawns. We should only sync locations here that we know have actually detached.
-            // We could figure out which locations have actually detached through a separate gen-kill analysis that we only
-            // need for this case, and possibly for borrow-checking. This is a SOUNDNESS problem that we should definitely fix.
-            self.task_tree.children(task).map(|child| self.state_exiting_task(child)).for_each(
-                |state| {
+            synced_tasks
+                .iter()
+                .map(|task| self.task_info.expect_last_location(*task))
+                .map(|last_location| {
+                    self.state_at_last_locations
+                        .get(&last_location)
+                        .expect("expected last location to have already been visited!")
+                })
+                .for_each(|state| {
                     // We use meet here because we need the number of initialized variables to increase at a sync,
                     // and meet is union for `DefinitelyInitialized`. It also makes sense since we're going down in the
                     // lattice by using meet, which takes us closer to all variables being initialized.
                     use crate::framework::lattice::MeetSemiLattice;
                     trans.meet(&state);
-                },
-            );
+                });
         }
 
         terminator.edges()
