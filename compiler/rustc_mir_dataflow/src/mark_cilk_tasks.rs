@@ -21,6 +21,7 @@ struct TaskData {
     pub last_locations: Vec<Location>,
 }
 
+#[allow(unused)]
 pub struct TaskTree {
     tasks: IndexVec<Task, TaskData>,
     basic_blocks: FxHashMap<BasicBlock, Task>,
@@ -127,6 +128,7 @@ impl TaskTree {
     }
 
     /// Get the task for the given location, panicking if it doesn't exist.
+    #[allow(unused)]
     pub fn expect_task(&self, location: Location) -> Task {
         self.task(location.block).expect("expected block to have a task!")
     }
@@ -134,6 +136,7 @@ impl TaskTree {
     /// Get the last locations of any task that is a descendant of this task, panicking if it doesn't exist.
     ///
     /// We return a boxed iterator because it's fairly hard to make a recursive iterator.
+    #[allow(unused)]
     pub fn descendant_last_locations(&self, task: Task) -> Box<dyn Iterator<Item = Location> + '_> {
         Box::new(self.children(task).flat_map(move |child| {
             self.last_locations(child).chain(self.descendant_last_locations(child))
@@ -147,6 +150,7 @@ impl TaskTree {
 
     /// Get the locations where this task may return control to the task its continuation belongs to, panicking if
     /// the task doesn't exist.
+    #[allow(unused)]
     pub fn last_locations(&self, task: Task) -> impl Iterator<Item = Location> + '_ {
         self.tasks[task].last_locations.iter().copied()
     }
@@ -204,6 +208,7 @@ impl TaskTree {
     }
 
     /// Create a TaskTree from a MIR body.
+    #[allow(unused)]
     pub fn from_body<'a, 'tcx>(body: &'a mir::Body<'tcx>) -> Self {
         // We use this instead of a visitor because we want to control the iteration order.
         // We need to know that all ancestors of a block are visited before the block itself.
