@@ -36,7 +36,7 @@ pub mod move_paths;
 pub mod points;
 pub mod rustc_peek;
 pub mod storage;
-mod task_info;
+pub mod task_info;
 pub mod un_derefer;
 pub mod value_analysis;
 

@@ -4,10 +4,12 @@ use crate::errors::{
 };
 use crate::framework::BitSetExt;
 use crate::impls::{
-    DefinitelyInitializedPlaces, MaybeInitializedPlaces, MaybeLiveLocals, MaybeUninitializedPlaces,
+    definitely_synced_tasks, maybe_synced_tasks, DefinitelyInitializedPlaces,
+    MaybeInitializedPlaces, MaybeLiveLocals, MaybeUninitializedPlaces,
 };
 use crate::move_paths::{HasMoveData, MoveData};
 use crate::move_paths::{LookupResult, MovePathIndex};
+use crate::task_info::TaskInfo;
 use crate::MoveDataParamEnv;
 use crate::{Analysis, JoinSemiLattice, ResultsCursor};
 use rustc_ast::MetaItem;
@@ -48,27 +50,38 @@ impl<'tcx> MirPass<'tcx> for SanityCheck {
         let param_env = tcx.param_env(def_id);
         let move_data = MoveData::gather_moves(body, tcx, param_env, |_| true);
         let mdpe = MoveDataParamEnv { move_data, param_env };
+        let task_info = TaskInfo::from_body(body);
+        let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+        let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
 
         if has_rustc_mir_with(tcx, def_id, sym::rustc_peek_maybe_init).is_some() {
-            let flow_inits = MaybeInitializedPlaces::new(tcx, body, &mdpe)
-                .into_engine(tcx, body)
-                .iterate_to_fixpoint();
+            let flow_inits =
+                MaybeInitializedPlaces::new(tcx, body, &mdpe, &task_info, &maybe_synced_tasks)
+                    .into_engine(tcx, body)
+                    .iterate_to_fixpoint();
 
             sanity_check_via_rustc_peek(tcx, flow_inits.into_results_cursor(body));
         }
 
         if has_rustc_mir_with(tcx, def_id, sym::rustc_peek_maybe_uninit).is_some() {
-            let flow_uninits = MaybeUninitializedPlaces::new(tcx, body, &mdpe)
-                .into_engine(tcx, body)
-                .iterate_to_fixpoint();
+            let flow_uninits = MaybeUninitializedPlaces::new(
+                tcx,
+                body,
+                &mdpe,
+                &task_info,
+                &definitely_synced_tasks,
+            )
+            .into_engine(tcx, body)
+            .iterate_to_fixpoint();
 
             sanity_check_via_rustc_peek(tcx, flow_uninits.into_results_cursor(body));
         }
 
         if has_rustc_mir_with(tcx, def_id, sym::rustc_peek_definite_init).is_some() {
-            let flow_def_inits = DefinitelyInitializedPlaces::new(tcx, body, &mdpe)
-                .into_engine(tcx, body)
-                .iterate_to_fixpoint();
+            let flow_def_inits =
+                DefinitelyInitializedPlaces::new(body, &mdpe, &task_info, &definitely_synced_tasks)
+                    .into_engine(tcx, body)
+                    .iterate_to_fixpoint();
 
             sanity_check_via_rustc_peek(tcx, flow_def_inits.into_results_cursor(body));
         }
