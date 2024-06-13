@@ -1,8 +1,9 @@
 #![feature(cilk)]
 // Tests that borrows are still live before a cilk_sync.
+// Currently fails because we kill borrows at the end of the block rather
+// than at the sync.
 
 // known-bug: unknown
-// build-pass
 // compile-flags: -C panic=abort
 // no-prefer-dynamic
 

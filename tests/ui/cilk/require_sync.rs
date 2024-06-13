@@ -1,8 +1,9 @@
 #![feature(cilk)]
 // Tests that values used in a spawned block must be Sync since they can be accessed in parallel.
+// Currently fails because we don't check that variables have the right traits for how they're
+// used in spawned blocks.
 
 // known-bug: unknown
-// build-pass
 // compile-flags: -C panic=abort
 // no-prefer-dynamic
 
