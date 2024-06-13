@@ -855,7 +855,9 @@ impl TaskInfo {
     /// Find the descendants of `task`.
     pub fn descendants(&self, task: Task) -> Box<dyn Iterator<Item = Task> + '_> {
         let task_data = &self.tasks[task];
-        Box::new(task_data.children.iter().flat_map(|t| self.descendants(t)))
+        Box::new(
+            task_data.children.iter().flat_map(|t| std::iter::once(t).chain(self.descendants(t))),
+        )
     }
 
     // Should be fine to only sync children in terms of dataflow state to restore?
