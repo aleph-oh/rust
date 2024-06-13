@@ -19,3 +19,7 @@ pub use self::liveness::MaybeLiveLocals;
 pub use self::liveness::MaybeTransitiveLiveLocals;
 pub use self::liveness::TransferFunction as LivenessTransferFunction;
 pub use self::storage_liveness::{MaybeRequiresStorage, MaybeStorageDead, MaybeStorageLive};
+pub use self::syncable_tasks::{
+    definitely_synced_tasks, maybe_synced_tasks, DefinitelySyncableTasks, DefinitelySyncedTasks,
+    MaybeSyncableTasks, MaybeSyncedTasks,
+};

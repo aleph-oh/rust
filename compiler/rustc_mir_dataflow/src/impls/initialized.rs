@@ -16,9 +16,7 @@ use crate::{drop_flag_effects, on_all_children_bits};
 use crate::{drop_flag_effects_for_location, JoinSemiLattice};
 use crate::{lattice, AnalysisDomain, GenKill, GenKillAnalysis, MaybeReachable};
 
-use super::syncable_tasks::{
-    definitely_synced_tasks, maybe_synced_tasks, DefinitelySyncedTasks, MaybeSyncedTasks,
-};
+use super::syncable_tasks::{DefinitelySyncedTasks, MaybeSyncedTasks};
 
 /// `MaybeInitializedPlaces` tracks all places that might be
 /// initialized upon reaching a particular point in the control flow
@@ -62,9 +60,9 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
     skip_unreachable_unwind: bool,
     /// Stores information about tasks: their last locations, the spindles they contain, and their
     /// parent-child relationships, for example.
-    task_info: TaskInfo,
+    task_info: &'a TaskInfo,
     /// Maps locations to the tasks which may be synced at a given location (must be a sync).
-    maybe_synced_tasks: MaybeSyncedTasks,
+    maybe_synced_tasks: &'a MaybeSyncedTasks,
     /// Maps locations to the state of the dataflow analysis at that location. The locations in this
     /// map are the last locations of tasks.
     state_at_last_locations: FxHashMap<Location, MaybeReachable<ChunkedBitSet<MovePathIndex>>>,
@@ -72,10 +70,13 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
 
 impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
     #[instrument(level = "debug", name = "MaybeInitializedPlaces::new", skip_all)]
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        // FIXME(jhilton): I don't like that this constructor does non-trivial work. Make the task info a parameter?
-        let task_info = TaskInfo::from_body(body);
-        let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        maybe_synced_tasks: &'a MaybeSyncedTasks,
+    ) -> Self {
         MaybeInitializedPlaces {
             tcx,
             body,
@@ -159,18 +160,21 @@ pub struct MaybeUninitializedPlaces<'a, 'tcx> {
     skip_unreachable_unwind: BitSet<mir::BasicBlock>,
 
     /// See [MaybeInitializedPlaces::task_info].
-    task_info: TaskInfo,
-    definitely_synced_tasks: DefinitelySyncedTasks,
+    task_info: &'a TaskInfo,
+    definitely_synced_tasks: &'a DefinitelySyncedTasks,
     /// See [MaybeInitializedPlaces::state_at_last_locations].
     state_at_last_locations: FxHashMap<Location, ChunkedBitSet<MovePathIndex>>,
 }
 
 impl<'a, 'tcx> MaybeUninitializedPlaces<'a, 'tcx> {
     #[instrument(level = "debug", name = "MaybeUninitializedPlaces::new", skip_all)]
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        // FIXME(jhilton): non-trivial work in constructor :(
-        let task_info = TaskInfo::from_body(body);
-        let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    ) -> Self {
         MaybeUninitializedPlaces {
             tcx,
             body,
@@ -245,15 +249,18 @@ impl<'a, 'tcx> HasMoveData<'tcx> for MaybeUninitializedPlaces<'a, 'tcx> {
 pub struct DefinitelyInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
-    task_info: TaskInfo,
-    definitely_synced_tasks: DefinitelySyncedTasks,
+    task_info: &'a TaskInfo,
+    definitely_synced_tasks: &'a DefinitelySyncedTasks,
     state_at_last_locations: FxHashMap<Location, lattice::Dual<BitSet<MovePathIndex>>>,
 }
 
 impl<'a, 'tcx> DefinitelyInitializedPlaces<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        let task_info = TaskInfo::from_body(body);
-        let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
+    pub fn new(
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    ) -> Self {
         DefinitelyInitializedPlaces {
             body,
             mdpe,
@@ -302,15 +309,18 @@ impl<'a, 'tcx> HasMoveData<'tcx> for DefinitelyInitializedPlaces<'a, 'tcx> {
 pub struct EverInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
-    task_info: TaskInfo,
-    maybe_synced_tasks: MaybeSyncedTasks,
+    task_info: &'a TaskInfo,
+    maybe_synced_tasks: &'a MaybeSyncedTasks,
     state_at_last_locations: FxHashMap<Location, ChunkedBitSet<InitIndex>>,
 }
 
 impl<'a, 'tcx> EverInitializedPlaces<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        let task_info = TaskInfo::from_body(body);
-        let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+    pub fn new(
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        maybe_synced_tasks: &'a MaybeSyncedTasks,
+    ) -> Self {
         EverInitializedPlaces {
             body,
             mdpe,

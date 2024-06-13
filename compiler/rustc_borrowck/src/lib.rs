@@ -33,6 +33,7 @@ use rustc_middle::mir::*;
 use rustc_middle::query::Providers;
 use rustc_middle::traits::DefiningAnchor;
 use rustc_middle::ty::{self, ParamEnv, RegionVid, TyCtxt};
+use rustc_mir_dataflow::task_info::TaskInfo;
 use rustc_session::lint::builtin::UNUSED_MUT;
 use rustc_span::{Span, Symbol};
 use rustc_target::abi::FieldIdx;
@@ -45,7 +46,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use rustc_mir_dataflow::impls::{
-    EverInitializedPlaces, MaybeInitializedPlaces, MaybeUninitializedPlaces,
+    definitely_synced_tasks, maybe_synced_tasks, EverInitializedPlaces, MaybeInitializedPlaces,
+    MaybeUninitializedPlaces,
 };
 use rustc_mir_dataflow::move_paths::{InitIndex, MoveOutIndex, MovePathIndex};
 use rustc_mir_dataflow::move_paths::{InitLocation, LookupResult, MoveData};
@@ -201,11 +203,15 @@ fn do_mir_borrowck<'tcx>(
 
     let mdpe = MoveDataParamEnv { move_data, param_env };
 
-    let mut flow_inits = MaybeInitializedPlaces::new(tcx, body, &mdpe)
-        .into_engine(tcx, body)
-        .pass_name("borrowck")
-        .iterate_to_fixpoint()
-        .into_results_cursor(body);
+    let task_info = TaskInfo::from_body(body);
+    let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+
+    let mut flow_inits =
+        MaybeInitializedPlaces::new(tcx, body, &mdpe, &task_info, &maybe_synced_tasks)
+            .into_engine(tcx, body)
+            .pass_name("borrowck")
+            .iterate_to_fixpoint()
+            .into_results_cursor(body);
 
     let locals_are_invalidated_at_exit = tcx.hir().body_owner_kind(def).is_fn_or_closure();
     let borrow_set =
@@ -259,11 +265,15 @@ fn do_mir_borrowck<'tcx>(
         .into_engine(tcx, body)
         .pass_name("borrowck")
         .iterate_to_fixpoint();
-    let flow_uninits = MaybeUninitializedPlaces::new(tcx, body, &mdpe)
-        .into_engine(tcx, body)
-        .pass_name("borrowck")
-        .iterate_to_fixpoint();
-    let flow_ever_inits = EverInitializedPlaces::new(tcx, body, &mdpe)
+
+    let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
+
+    let flow_uninits =
+        MaybeUninitializedPlaces::new(tcx, body, &mdpe, &task_info, &definitely_synced_tasks)
+            .into_engine(tcx, body)
+            .pass_name("borrowck")
+            .iterate_to_fixpoint();
+    let flow_ever_inits = EverInitializedPlaces::new(body, &mdpe, &task_info, &maybe_synced_tasks)
         .into_engine(tcx, body)
         .pass_name("borrowck")
         .iterate_to_fixpoint();
