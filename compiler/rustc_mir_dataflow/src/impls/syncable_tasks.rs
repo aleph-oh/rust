@@ -48,45 +48,36 @@ use crate::{Analysis, AnalysisDomain, Forward, GenKill, GenKillAnalysis, Results
 /// continuation header by construction.
 pub struct DefinitelySyncableTasks<'task_info> {
     task_info: &'task_info TaskInfo,
-    saved_reattach_state: Option<(mir::BasicBlock, Dual<BitSet<Task>>)>,
+    // We use a sparse representation here with a HashMap rather than an IndexVec because
+    // there are probably many fewer continuation headers than there are basic blocks in
+    // a function body.
+    saved_reattach_state: FxHashMap<mir::BasicBlock, Dual<BitSet<Task>>>,
 }
 
 impl<'task_info> DefinitelySyncableTasks<'task_info> {
     fn cache_reattach_state(&mut self, block: mir::BasicBlock, output_state: Dual<BitSet<Task>>) {
-        assert!(
-            self.saved_reattach_state.is_none(),
-            "expected no saved reattach state when caching reattach state!"
-        );
-        self.saved_reattach_state = Some((block, output_state));
+        self.saved_reattach_state.insert(block, output_state);
     }
 
-    fn should_take_reattach_state(&self, current_block: mir::BasicBlock) -> bool {
-        self.saved_reattach_state
-            .as_ref()
-            .filter(|(block, _state)| *block == current_block)
-            .is_some()
-    }
-
-    fn expect_take_reattach_state(&mut self) -> Dual<BitSet<Task>> {
-        self.saved_reattach_state
-            .take()
-            .map(|(_block, state)| state)
-            .expect("expected reattach state to be defined!")
+    fn get_reattach_state(&self, current_block: mir::BasicBlock) -> Option<&Dual<BitSet<Task>>> {
+        self.saved_reattach_state.get(&current_block)
     }
 
     fn update_state_from_reattach_state(
         &mut self,
-        current_block: mir::BasicBlock,
+        location: mir::Location,
         trans: &mut impl GenKill<Task>,
     ) {
-        // The only special case here is where our location is the beginning of the basic block referenced
+        // Only update state at the top of a basic block. It should propagate through otherwise.
+        if location.statement_index != 0 {
+            return;
+        }
+
+        // The only special case here is where our location is the beginning of a basic block referenced
         // in self. If that's the case, we want to union that dataflow state with the current dataflow state.
         // This is because in the handling of Reattach, we'll have cached the dataflow state so that it can
         // be merged into the continuation header that we're seeing now.
-        if self.should_take_reattach_state(current_block) {
-            let state = self.expect_take_reattach_state();
-            // We have to use meet because the domain is a dual of a join (union-based) lattice
-            // where join is instead intersection, so we use meet to get union.
+        if let Some(state) = self.get_reattach_state(location.block) {
             trans.gen_all(state.0.iter());
         }
     }
@@ -99,11 +90,17 @@ impl<'tcx, 'task_info> AnalysisDomain<'tcx> for DefinitelySyncableTasks<'task_in
     const NAME: &'static str = "definitely_syncable_tasks";
 
     fn bottom_value(&self, _body: &mir::Body<'tcx>) -> Self::Domain {
-        Dual(BitSet::new_empty(self.task_info.num_tasks()))
+        // This bottom value shouldn't actually be observed by any block
+        // directly since the entry sees something different and other
+        // blocks see what they get from their predecessors. It's just
+        // that our join operator is intersection so we need the
+        // bottom value to be the identity.
+        Dual(BitSet::new_filled(self.task_info.num_tasks()))
     }
 
     fn initialize_start_block(&self, _body: &mir::Body<'tcx>, state: &mut Self::Domain) {
         // Task 0 is initially executing at the beginning of the start block.
+        state.0.clear();
         state.gen(Task::from_usize(0));
     }
 }
@@ -121,7 +118,7 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for DefinitelySyncableTasks<'task_i
         _statement: &mir::Statement<'tcx>,
         location: mir::Location,
     ) {
-        self.update_state_from_reattach_state(location.block, trans);
+        self.update_state_from_reattach_state(location, trans);
     }
 
     fn call_return_effect(
@@ -142,7 +139,7 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for DefinitelySyncableTasks<'task_i
         terminator: &'mir mir::Terminator<'tcx>,
         location: mir::Location,
     ) -> mir::TerminatorEdges<'mir, 'tcx> {
-        self.update_state_from_reattach_state(location.block, trans);
+        self.update_state_from_reattach_state(location, trans);
 
         let kind = &terminator.kind;
         if let mir::TerminatorKind::Detach { spawned_task, continuation: _ } = kind {
@@ -246,6 +243,7 @@ impl<'tcx, 'task_info> GenKillAnalysis<'tcx> for MaybeSyncableTasks<'task_info> 
 
 /// Run `analysis`, naming it `pass_name` if `pass_name` is not `None`, on `body` with `tcx`.
 /// Returns the result of `analysis` converging to fixpoint.
+#[instrument(level = "debug", skip(analysis, tcx, body))]
 fn run_analysis<'tcx, A>(
     analysis: A,
     pass_name: Option<&'static str>,
@@ -344,9 +342,10 @@ pub struct DefinitelySyncedTasks {
 }
 
 impl DefinitelySyncedTasks {
+    #[instrument(level = "debug", name = "DefinitelySyncedTasks::new", skip_all)]
     fn new<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>, task_info: &TaskInfo) -> Self {
         let mut cursor = run_analysis(
-            DefinitelySyncableTasks { task_info, saved_reattach_state: None },
+            DefinitelySyncableTasks { task_info, saved_reattach_state: FxHashMap::default() },
             Some("definitely_synced_tasks"),
             tcx,
             body,
@@ -364,6 +363,10 @@ impl DefinitelySyncedTasks {
         .collect();
 
         Self { synced_tasks }
+    }
+
+    pub fn synced_tasks_at(&self, location: &mir::Location) -> &SmallVec<[Task; 2]> {
+        self.synced_tasks.get(location).expect("expected location to have synced tasks!")
     }
 }
 
