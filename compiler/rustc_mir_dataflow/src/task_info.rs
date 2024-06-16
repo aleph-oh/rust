@@ -88,6 +88,7 @@ impl TaskDataBuilder {
 }
 
 /// Whether a task is the root task of the function or a descendant of the root task.
+#[derive(Debug)]
 pub enum TaskKind {
     Root,
     Child { parent: Task, last_location: Location },
