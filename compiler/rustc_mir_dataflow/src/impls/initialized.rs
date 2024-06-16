@@ -407,9 +407,13 @@ fn synced_task_last_states<'a, State>(
     task_info: &'a TaskInfo,
     state_at_last_locations: &'a FxHashMap<Location, State>,
 ) -> impl Iterator<Item = &'a State> + 'a {
-    synced_tasks.map(|task| task_info.expect_last_location(task)).map(|last_location| {
-        state_at_last_locations.get(&last_location).expect("expected location to have saved state!")
-    })
+    synced_tasks
+        .map(|task| task_info.expect_last_location(task))
+        // NOTE(jhilton): we originally expect the map to contain the last location,
+        // but in the case of a loop this isn't actually true. We expect instead
+        // that we'll eventually hit this sync again after changing one of its
+        // predecessors (although I'm not completely sure).
+        .filter_map(|last_location| state_at_last_locations.get(&last_location))
 }
 
 impl<'tcx> GenKillAnalysis<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
