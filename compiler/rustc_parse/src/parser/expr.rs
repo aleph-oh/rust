@@ -2797,6 +2797,8 @@ impl<'a> Parser<'a> {
 
     // Parses `cilk_for <src_pat> in <src_expr> <src_loop_block>` (`cilk_for` token already eaten).
     fn parse_expr_cilk_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
+        let cilk_for_span = self.prev_token.span;
+        self.sess.gated_spans.gate(sym::cilk, cilk_for_span);
         let kind = ForLoopKind::CilkFor;
         let (pat, expr) = self.parse_for_head()?;
         // Recover from missing expression in `for` loop
