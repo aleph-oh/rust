@@ -142,6 +142,10 @@ fn split_block(
         statements: block_data.statements.split_off(location.statement_index),
         terminator: block_data.terminator.take(),
         is_cleanup: block_data.is_cleanup,
+        // This is false because the prior block is going to be the loop header. Might not be correct since maybe the
+        // earlier block should actually be the header. Depends on where the jump points to, if that's even
+        // code relevant here.
+        is_parallel_loop_header: false,
     };
 
     basic_blocks.push(new_block)

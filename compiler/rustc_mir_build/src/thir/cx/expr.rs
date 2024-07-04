@@ -722,7 +722,7 @@ impl<'tcx> Cx<'tcx> {
                 scrutinee_hir_id: discr.hir_id,
                 arms: arms.iter().map(|a| self.convert_arm(a)).collect(),
             },
-            hir::ExprKind::Loop(body, ..) => {
+            hir::ExprKind::Loop(body, _, source, ..) => {
                 let block_ty = self.typeck_results().node_type(body.hir_id);
                 let temp_lifetime = self
                     .rvalue_scopes
@@ -734,7 +734,21 @@ impl<'tcx> Cx<'tcx> {
                     span: self.thir[block].span,
                     kind: ExprKind::Block { block },
                 });
-                ExprKind::Loop { body }
+                if matches!(source, hir::LoopSource::CilkFor) {
+                    // We want to evaluate to a block that spawns each inner expression,
+                    // and then syncs afterward.
+                    let spawned_body = self.thir.exprs.push(Expr {
+                        ty: block_ty,
+                        temp_lifetime,
+                        span: self.thir[block].span,
+                        kind: ExprKind::CilkSpawn { computation: body },
+                    });
+                    // NOTE(jhilton): when tapir_loop_spawn is true, we should be
+                    // syncing afterwards. That'll happen when lowering to MIR.
+                    ExprKind::Loop { body: spawned_body, tapir_loop_spawn: true }
+                } else {
+                    ExprKind::Loop { body, tapir_loop_spawn: false }
+                }
             }
             hir::ExprKind::Field(source, ..) => {
                 let mut kind = ExprKind::Field {

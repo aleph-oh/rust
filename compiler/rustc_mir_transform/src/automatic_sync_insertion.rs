@@ -36,6 +36,7 @@ impl<'tcx> MirPass<'tcx> for InsertSyncs {
                         kind: mir::TerminatorKind::Return,
                     }),
                     is_cleanup: false,
+                    is_parallel_loop_header: false,
                 };
                 let target = new_blocks.as_mut().push(return_block);
                 let new_bb_data =

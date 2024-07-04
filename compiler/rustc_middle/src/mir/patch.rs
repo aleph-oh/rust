@@ -73,6 +73,7 @@ impl<'tcx> MirPatch<'tcx> {
                 kind: TerminatorKind::UnwindResume,
             }),
             is_cleanup: true,
+            is_parallel_loop_header: false,
         });
         self.resume_block = Some(bb);
         bb
@@ -90,6 +91,7 @@ impl<'tcx> MirPatch<'tcx> {
                 kind: TerminatorKind::Unreachable,
             }),
             is_cleanup: true,
+            is_parallel_loop_header: false,
         });
         self.unreachable_cleanup_block = Some(bb);
         bb
@@ -109,6 +111,7 @@ impl<'tcx> MirPatch<'tcx> {
                 kind: TerminatorKind::UnwindTerminate(reason),
             }),
             is_cleanup: true,
+            is_parallel_loop_header: false,
         });
         self.terminate_block = Some((bb, reason));
         bb

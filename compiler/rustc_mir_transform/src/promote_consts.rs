@@ -641,6 +641,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
                 kind: TerminatorKind::Return,
             }),
             is_cleanup: false,
+            is_parallel_loop_header: false,
         })
     }
 
