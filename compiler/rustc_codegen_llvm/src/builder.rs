@@ -186,10 +186,8 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn br(&mut self, dest: &'ll BasicBlock) {
-        unsafe {
-            llvm::LLVMBuildBr(self.llbuilder, dest);
-        }
+    fn br(&mut self, dest: &'ll BasicBlock) -> &'ll Value {
+        unsafe { llvm::LLVMBuildBr(self.llbuilder, dest) }
     }
 
     fn cond_br(

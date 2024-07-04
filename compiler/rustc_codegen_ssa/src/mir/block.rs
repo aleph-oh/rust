@@ -33,6 +33,11 @@ enum MergingSucc {
     True,
 }
 
+enum AddParallelLoopMetadata {
+    False,
+    True,
+}
+
 /// Used by `FunctionCx::codegen_terminator` for emitting common patterns
 /// e.g., creating a basic block, calling a function, etc.
 struct TerminatorCodegenHelper<'tcx> {
@@ -125,6 +130,23 @@ impl<'a, 'tcx> TerminatorCodegenHelper<'tcx> {
         target: mir::BasicBlock,
         mergeable_succ: bool,
     ) -> MergingSucc {
+        self.funclet_br_maybe_add_metadata(
+            fx,
+            bx,
+            target,
+            mergeable_succ,
+            AddParallelLoopMetadata::False,
+        )
+    }
+
+    fn funclet_br_maybe_add_metadata<Bx: BuilderMethods<'a, 'tcx>>(
+        &self,
+        fx: &mut FunctionCx<'a, 'tcx, Bx>,
+        bx: &mut Bx,
+        target: mir::BasicBlock,
+        mergeable_succ: bool,
+        add_parallel_loop_metadata: AddParallelLoopMetadata,
+    ) -> MergingSucc {
         let (needs_landing_pad, is_cleanupret) = self.llbb_characteristics(fx, target);
         if mergeable_succ && !needs_landing_pad && !is_cleanupret {
             // We can merge the successor into this bb, so no need for a `br`.
@@ -139,7 +161,10 @@ impl<'a, 'tcx> TerminatorCodegenHelper<'tcx> {
                 // to a trampoline.
                 bx.cleanup_ret(self.funclet(fx).unwrap(), Some(lltarget));
             } else {
-                bx.br(lltarget);
+                let inst = bx.br(lltarget);
+                if matches!(add_parallel_loop_metadata, AddParallelLoopMetadata::True) {
+                    bx.tapir_loop_spawn_strategy_metadata(inst);
+                }
             }
             MergingSucc::False
         }
@@ -1224,7 +1249,18 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             }
 
             mir::TerminatorKind::Goto { target } => {
-                helper.funclet_br(self, bx, target, mergeable_succ())
+                let add_tapir_metadata = if self.mir[bb].is_parallel_loop_header {
+                    AddParallelLoopMetadata::True
+                } else {
+                    AddParallelLoopMetadata::False
+                };
+                helper.funclet_br_maybe_add_metadata(
+                    self,
+                    bx,
+                    target,
+                    mergeable_succ(),
+                    add_tapir_metadata,
+                )
             }
 
             mir::TerminatorKind::SwitchInt { ref discr, ref targets } => {
