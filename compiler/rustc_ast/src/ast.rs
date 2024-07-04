@@ -1552,6 +1552,7 @@ pub enum ExprKind {
 pub enum ForLoopKind {
     For,
     ForAwait,
+    CilkFor,
 }
 
 /// Used to differentiate between `async {}` blocks and `gen {}` blocks.

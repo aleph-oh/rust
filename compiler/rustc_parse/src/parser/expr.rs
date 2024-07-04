@@ -1457,6 +1457,8 @@ impl<'a> Parser<'a> {
                     assert!(this.eat_keyword(kw::For));
                     this.parse_expr_for(None, this.prev_token.span)
                 }
+            } else if this.eat_keyword(kw::CilkFor) {
+                this.parse_expr_cilk_for(None, this.prev_token.span)
             } else if this.eat_keyword(kw::While) {
                 this.parse_expr_while(None, this.prev_token.span)
             } else if let Some(label) = this.eat_label() {
@@ -2791,6 +2793,34 @@ impl<'a> Parser<'a> {
         self.check_for_for_in_in_typo(self.prev_token.span);
         let expr = self.parse_expr_res(Restrictions::NO_STRUCT_LITERAL, None)?;
         Ok((pat, expr))
+    }
+
+    // Parses `cilk_for <src_pat> in <src_expr> <src_loop_block>` (`cilk_for` token already eaten).
+    fn parse_expr_cilk_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
+        let kind = ForLoopKind::CilkFor;
+        let (pat, expr) = self.parse_for_head()?;
+        // Recover from missing expression in `for` loop
+        if matches!(expr.kind, ExprKind::Block(..))
+            && !matches!(self.token.kind, token::OpenDelim(Delimiter::Brace))
+            && self.may_recover()
+        {
+            self.dcx()
+                .emit_err(errors::MissingExpressionInForLoop { span: expr.span.shrink_to_lo() });
+            let err_expr = self.mk_expr(expr.span, ExprKind::Err);
+            let block = self.mk_block(thin_vec![], BlockCheckMode::Default, self.prev_token.span);
+            return Ok(self.mk_expr(
+                lo.to(self.prev_token.span),
+                ExprKind::ForLoop { pat, iter: err_expr, body: block, label: opt_label, kind },
+            ));
+        }
+
+        let (attrs, loop_block) = self.parse_inner_attrs_and_block()?;
+
+        let kind = ExprKind::ForLoop { pat, iter: expr, body: loop_block, label: opt_label, kind };
+
+        self.recover_loop_else("for", lo)?;
+
+        Ok(self.mk_expr_with_attrs(lo.to(self.prev_token.span), kind, attrs))
     }
 
     /// Parses `for await? <src_pat> in <src_expr> <src_loop_block>` (`for` token already eaten).
