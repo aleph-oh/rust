@@ -1723,6 +1723,8 @@ impl<'hir> LoweringContext<'_, 'hir> {
             }
         };
 
+        // FIXME(jhilton): maybe for a cilk_for we only want to spawn the part after
+        // the break.
         let match_expr = self.arena.alloc(self.expr_match(
             for_span,
             into_iter_expr,
