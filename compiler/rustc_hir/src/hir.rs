@@ -2055,6 +2055,8 @@ pub enum LoopSource {
     While,
     /// A `for _ in _ { .. }` loop.
     ForLoop,
+    /// A `cilk_for _ in _ { .. }` loop.
+    CilkFor,
 }
 
 impl LoopSource {
@@ -2063,6 +2065,7 @@ impl LoopSource {
             LoopSource::Loop => "loop",
             LoopSource::While => "while",
             LoopSource::ForLoop => "for",
+            LoopSource::CilkFor => "cilk_for",
         }
     }
 }
