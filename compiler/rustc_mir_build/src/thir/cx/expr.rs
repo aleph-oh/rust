@@ -734,21 +734,13 @@ impl<'tcx> Cx<'tcx> {
                     span: self.thir[block].span,
                     kind: ExprKind::Block { block },
                 });
-                if matches!(source, hir::LoopSource::CilkFor) {
-                    // We want to evaluate to a block that spawns each inner expression,
-                    // and then syncs afterward.
-                    let spawned_body = self.thir.exprs.push(Expr {
-                        ty: block_ty,
-                        temp_lifetime,
-                        span: self.thir[block].span,
-                        kind: ExprKind::CilkSpawn { computation: body },
-                    });
-                    // NOTE(jhilton): when tapir_loop_spawn is true, we should be
-                    // syncing afterwards. That'll happen when lowering to MIR.
-                    ExprKind::Loop { body: spawned_body, tapir_loop_spawn: true }
-                } else {
-                    ExprKind::Loop { body, tapir_loop_spawn: false }
-                }
+                // When lowering to HIR, we already spawn only the Some(..) arm of the loop
+                // for the cilk_for case. This means that all we have to do is keep track
+                // of the origin of the loop so we can add metadata in MIR, but we don't
+                // have to spawn the body (when lowering to MIR we'll also sync after the
+                // loop).
+                let tapir_loop_spawn = matches!(source, hir::LoopSource::CilkFor);
+                ExprKind::Loop { body, tapir_loop_spawn }
             }
             hir::ExprKind::Field(source, ..) => {
                 let mut kind = ExprKind::Field {

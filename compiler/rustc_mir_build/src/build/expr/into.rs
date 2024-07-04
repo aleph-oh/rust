@@ -256,10 +256,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 );
 
                 if tapir_loop_spawn {
-                    // NOTE(jhilton): currently hoping that this is okay because technically we shouldn't
-                    // have a break, but I think by the structure of a loop we're not "breaking" from
-                    // a cilk-for. Might need to add a custom cilk_for HIR node that isn't desugared
-                    // from loop, depending on the CFG structure.
+                    // NOTE(jhilton): when building HIR we spawn only when the yielded value is Some.
+                    // So we know that if the loop body itself had no breaks, we won't be breaking or continuing
+                    // from within the loop.
 
                     // First, we need to grab the block the loop jumps to.
                     unpack!(block = exit_block);

@@ -1606,10 +1606,15 @@ impl<'hir> LoweringContext<'_, 'hir> {
         };
 
         // Some(<pat>) => <body>,
+        // For cilk_for we instead perform Some(<pat>) => cilk_spawn <body>.
         let some_arm = {
             let some_pat = self.pat_some(pat_span, pat);
             let body_block = self.with_loop_scope(e.id, |this| this.lower_block(body, false));
-            let body_expr = self.arena.alloc(self.expr_block(body_block));
+            let body_expr = if matches!(loop_kind, ForLoopKind::CilkFor) {
+                self.arena.alloc(self.expr_spawn_block(body_block))
+            } else {
+                self.arena.alloc(self.expr_block(body_block))
+            };
             self.arm(some_pat, body_expr)
         };
 
@@ -1621,9 +1626,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let match_expr = {
             let iter = self.expr_ident(head_span, iter, iter_pat_nid);
             let next_expr = match loop_kind {
-                // FIXME(jhilton): should do a smarter lowering instead. See similar
-                // comment elsewhere. I think using next on a range is fine since we're
-                // not spawning the call to next itself.
                 ForLoopKind::For | ForLoopKind::CilkFor => {
                     // `Iterator::next(&mut iter)`
                     let ref_mut_iter = self.expr_mut_addr_of(head_span, iter);
@@ -1723,8 +1725,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
             }
         };
 
-        // FIXME(jhilton): maybe for a cilk_for we only want to spawn the part after
-        // the break.
         let match_expr = self.arena.alloc(self.expr_match(
             for_span,
             into_iter_expr,
@@ -2080,6 +2080,11 @@ impl<'hir> LoweringContext<'_, 'hir> {
 
     pub(super) fn expr_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
         self.expr(b.span, hir::ExprKind::Block(b, None))
+    }
+
+    fn expr_spawn_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
+        let block = self.arena.alloc(self.expr_block(b));
+        self.expr(b.span, hir::ExprKind::CilkSpawn(block))
     }
 
     pub(super) fn expr_array_ref(
