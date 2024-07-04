@@ -681,6 +681,30 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
+    fn tapir_loop_spawn_strategy_metadata(&mut self, branch: &'ll Value) {
+        // NOTE(jhilton): I think we can't use llvm.loop.mustprogress since ranges can be unbounded.
+        const TAPIR_LOOP_SPAWN_STRATEGY: &'static str = "tapir.loop.spawn.strategy";
+        const LOOP_DIVIDE_AND_CONQUER: i32 = 1;
+        unsafe {
+            // First we need to make the metadata for tapir.loop.spawn.strategy.
+            let metadata_name = llvm::LLVMMDStringInContext2(
+                self.cx.llcx,
+                TAPIR_LOOP_SPAWN_STRATEGY.as_ptr() as *const c_char,
+                TAPIR_LOOP_SPAWN_STRATEGY.as_bytes().len(),
+            );
+            // Now we need to make the value for the divide-and-conquer strategy.
+            let metadata_value = llvm::LLVMValueAsMetadata(self.const_i32(LOOP_DIVIDE_AND_CONQUER));
+            let v = [metadata_name, metadata_value];
+            // Now make the actual metadata node and assign it to the branch.
+            let node = llvm::LLVMMDNodeInContext2(self.cx.llcx, v.as_ptr(), v.len());
+            llvm::LLVMSetMetadata(
+                branch,
+                llvm::MD_loop as c_uint,
+                llvm::LLVMMetadataAsValue(self.cx.llcx, node),
+            )
+        }
+    }
+
     fn store(&mut self, val: &'ll Value, ptr: &'ll Value, align: Align) -> &'ll Value {
         self.store_with_flags(val, ptr, align, MemFlags::empty())
     }
