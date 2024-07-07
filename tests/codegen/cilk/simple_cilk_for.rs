@@ -14,4 +14,4 @@ pub fn main() {
     assert_eq!(45, sum.into_inner());
 }
 
-// CHECK: !tapir.loop.spawn.strategy
+// CHECK: tapir.loop.spawn.strategy
