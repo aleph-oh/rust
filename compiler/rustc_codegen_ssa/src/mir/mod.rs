@@ -119,6 +119,10 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     /// we add a statement to compute the sync region.
     sync_region: Option<Bx::Value>,
 
+    /// We need to know the basic blocks terminated by back-edges that go into
+    /// parallel loop headers. This is so we can annotate with the right metadata.
+    parallel_back_edges: BitSet<mir::BasicBlock>,
+
     /// A stack of values returned from `tapir_runtime_start` for use in their corresponding `tapir_runtime_stop`
     /// call. We might need a more complex data structure than this if the token should ever be reused, but it's
     /// my impression that that isn't the case.
@@ -221,6 +225,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         per_local_var_debug_info: None,
         caller_location: None,
         sync_region: None,
+        parallel_back_edges: BitSet::new_empty(mir.basic_blocks.len()),
         runtime_hint_stack: SmallVec::new(),
     };
 
@@ -282,9 +287,30 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
+    let parallel_back_edges = || {
+        let mut seen = rustc_data_structures::fx::FxHashSet::default();
+        mir::traversal::reverse_postorder(mir).filter_map(move |(bb, bb_data)| {
+            seen.insert(bb);
+            if let mir::TerminatorKind::Goto { target } = bb_data.terminator().kind {
+                // If the target of the jump is a parallel loop header and we've already observed
+                // it, we know this must be a loop back-edge.
+                if mir.basic_blocks[target].is_parallel_loop_header && seen.contains(&target) {
+                    return Some(bb);
+                }
+            }
+            None
+        })
+    };
+
     if Bx::supports_tapir() && uses_cilk_control_flow() {
         // Add a sync region at the top of the function, so we can use it later.
         fx.sync_region = Some(start_bx.sync_region_start());
+
+        // Let's figure out the parallel back-edges. These are edges into parallel
+        // loop headers.
+        parallel_back_edges().for_each(|bb| {
+            fx.parallel_back_edges.insert(bb);
+        });
     }
 
     // The builders will be created separately for each basic block at `codegen_block`.

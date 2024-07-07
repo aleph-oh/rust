@@ -1249,11 +1249,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             }
 
             mir::TerminatorKind::Goto { target } => {
-                let add_tapir_metadata = if self.mir[bb].is_parallel_loop_header {
+                let add_tapir_metadata = if self.parallel_back_edges.contains(bb) {
                     AddParallelLoopMetadata::True
                 } else {
                     AddParallelLoopMetadata::False
                 };
+                // NOTE(jhilton): we attach the metadata to the parallel loop header.
                 helper.funclet_br_maybe_add_metadata(
                     self,
                     bx,
