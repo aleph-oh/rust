@@ -1,7 +1,8 @@
-#![feature(cilk)]
-// This tests that a simple cilk_for outputs roughly correctly structured metadata.
 
-// compile-flags: -C panic=abort -C no-prepopulate-passes
+#![feature(cilk)]
+// This tests that a simple cilk_for performs loop spawning.
+
+// compile-flags: -C panic=abort -O
 // no-prefer-dynamic
 
 use std::sync::atomic::AtomicU64;
@@ -14,4 +15,4 @@ pub fn main() {
     assert_eq!(45, sum.into_inner());
 }
 
-// CHECK: tapir.loop.spawn.strategy
+// CHECK: ls1
