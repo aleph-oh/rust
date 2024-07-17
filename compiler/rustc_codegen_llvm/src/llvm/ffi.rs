@@ -900,6 +900,13 @@ extern "C" {
     pub fn LLVMSetMetadata<'a>(Val: &'a Value, KindID: c_uint, Node: &'a Value);
     pub fn LLVMGlobalSetMetadata<'a>(Val: &'a Value, KindID: c_uint, Metadata: &'a Metadata);
     pub fn LLVMValueAsMetadata(Node: &Value) -> &Metadata;
+    pub fn LLVMRustMDGetTemporary(C: &Context) -> &Metadata;
+    pub fn LLVMRustMDDeleteTemporary(Metadata: &Metadata);
+    pub fn LLVMRustReplaceMDOperandWith<'a>(
+        Metadata: &'a Metadata,
+        Index: size_t,
+        NewMetadata: &'a Metadata,
+    );
 
     // Operations on constants of any type
     pub fn LLVMConstNull(Ty: &Type) -> &Value;
