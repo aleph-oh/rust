@@ -15,4 +15,6 @@ pub fn main() {
     assert_eq!(45, sum.into_inner());
 }
 
-// CHECK: ls1
+// We expect to see this substring somewhere because it indicates that we have found a basic block
+// which resulted from loop spawning.
+// CHECK: .ls1
