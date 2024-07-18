@@ -2801,7 +2801,7 @@ impl<'a> Parser<'a> {
         self.sess.gated_spans.gate(sym::cilk, cilk_for_span);
         let kind = ForLoopKind::CilkFor;
         let (pat, expr) = self.parse_for_head()?;
-        // Recover from missing expression in `for` loop
+        // Recover from missing expression in `cilk_for` loop
         if matches!(expr.kind, ExprKind::Block(..))
             && !matches!(self.token.kind, token::OpenDelim(Delimiter::Brace))
             && self.may_recover()
