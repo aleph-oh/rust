@@ -13,7 +13,7 @@ use rustc_data_structures::small_c_str::SmallCStr;
 use rustc_llvm::RustString;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::str::FromStr;
 use std::string::FromUtf8Error;
 
@@ -343,12 +343,6 @@ impl Deref for TemporaryMetadataNode<'_> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { self.raw.as_ref() }
-    }
-}
-
-impl DerefMut for TemporaryMetadataNode<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.raw.as_mut() }
     }
 }
 
