@@ -684,7 +684,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         const TAPIR_LOOP_SPAWN_STRATEGY: &'static str = "tapir.loop.spawn.strategy";
         const LOOP_DIVIDE_AND_CONQUER: i32 = 1;
         unsafe {
-            let temp = llvm::LLVMRustMDGetTemporary(self.cx.llcx);
+            let temp = llvm::TemporaryMetadataNode::new(self.cx.llcx);
             // First we need to make the metadata for tapir.loop.spawn.strategy.
             let metadata_name = llvm::LLVMMDStringInContext2(
                 self.cx.llcx,
@@ -702,12 +702,10 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             );
 
             // Now group the loop with all its associated nodes and assign the node to the branch.
-            let v = [temp, tapir_metadata];
+            let v = [&temp, tapir_metadata];
             let node = llvm::LLVMMDNodeInContext2(self.cx.llcx, v.as_ptr(), v.len());
             // Make the node self-referential: this is what loops expect.
             llvm::LLVMRustReplaceMDOperandWith(node, 0, node);
-
-            llvm::LLVMRustMDDeleteTemporary(temp);
 
             llvm::LLVMSetMetadata(
                 branch,
