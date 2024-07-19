@@ -1606,10 +1606,15 @@ impl<'hir> LoweringContext<'_, 'hir> {
         };
 
         // Some(<pat>) => <body>,
+        // For cilk_for we instead perform Some(<pat>) => cilk_spawn <body>.
         let some_arm = {
             let some_pat = self.pat_some(pat_span, pat);
             let body_block = self.with_loop_scope(e.id, |this| this.lower_block(body, false));
-            let body_expr = self.arena.alloc(self.expr_block(body_block));
+            let body_expr = if matches!(loop_kind, ForLoopKind::CilkFor) {
+                self.arena.alloc(self.expr_spawn_block(body_block))
+            } else {
+                self.arena.alloc(self.expr_block(body_block))
+            };
             self.arm(some_pat, body_expr)
         };
 
@@ -1621,7 +1626,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let match_expr = {
             let iter = self.expr_ident(head_span, iter, iter_pat_nid);
             let next_expr = match loop_kind {
-                ForLoopKind::For => {
+                ForLoopKind::For | ForLoopKind::CilkFor => {
                     // `Iterator::next(&mut iter)`
                     let ref_mut_iter = self.expr_mut_addr_of(head_span, iter);
                     self.expr_call_lang_item_fn(
@@ -1660,10 +1665,17 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let loop_block = self.block_all(for_span, arena_vec![self; match_stmt], None);
 
         // `[opt_ident]: loop { ... }`
+        // If we have a cilk_for we want to indicate this in the loop so the header can be
+        // annotated correctly later.
+        let loop_source = if matches!(loop_kind, ForLoopKind::CilkFor) {
+            hir::LoopSource::CilkFor
+        } else {
+            hir::LoopSource::ForLoop
+        };
         let kind = hir::ExprKind::Loop(
             loop_block,
             self.lower_label(opt_label),
-            hir::LoopSource::ForLoop,
+            loop_source,
             self.lower_span(for_span.with_hi(head.span.hi())),
         );
         let loop_expr =
@@ -1699,6 +1711,17 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 // `unsafe { ... }`
                 let iter = self.arena.alloc(self.expr_unsafe(iter));
                 iter
+            }
+            ForLoopKind::CilkFor => {
+                // FIXME(jhilton): this should call something for converting to a random-access iterator
+                // or otherwise semantically check that the expression is a random-access iterator (or
+                // only work on ranges for now).
+                // `::std::iter::IntoIterator::into_iter(<head>)`
+                self.expr_call_lang_item_fn(
+                    head_span,
+                    hir::LangItem::IntoIterIntoIter,
+                    arena_vec![self; head],
+                )
             }
         };
 
@@ -2057,6 +2080,11 @@ impl<'hir> LoweringContext<'_, 'hir> {
 
     pub(super) fn expr_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
         self.expr(b.span, hir::ExprKind::Block(b, None))
+    }
+
+    fn expr_spawn_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
+        let block = self.arena.alloc(self.expr_block(b));
+        self.expr(b.span, hir::ExprKind::CilkSpawn(block))
     }
 
     pub(super) fn expr_array_ref(

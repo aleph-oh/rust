@@ -43,7 +43,9 @@ impl NonConstExpr {
                 return None;
             }
 
-            Self::Loop(ForLoop) | Self::Match(ForLoopDesugar) => &[sym::const_for],
+            Self::Loop(ForLoop) | Self::Match(ForLoopDesugar) | Self::Loop(CilkFor) => {
+                &[sym::const_for]
+            }
 
             Self::Match(TryDesugar(_)) => &[sym::const_try],
 

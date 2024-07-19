@@ -722,7 +722,7 @@ impl<'tcx> Cx<'tcx> {
                 scrutinee_hir_id: discr.hir_id,
                 arms: arms.iter().map(|a| self.convert_arm(a)).collect(),
             },
-            hir::ExprKind::Loop(body, ..) => {
+            hir::ExprKind::Loop(body, _, source, ..) => {
                 let block_ty = self.typeck_results().node_type(body.hir_id);
                 let temp_lifetime = self
                     .rvalue_scopes
@@ -734,7 +734,13 @@ impl<'tcx> Cx<'tcx> {
                     span: self.thir[block].span,
                     kind: ExprKind::Block { block },
                 });
-                ExprKind::Loop { body }
+                // When lowering to HIR, we already spawn only the Some(..) arm of the loop
+                // for the cilk_for case. This means that all we have to do is keep track
+                // of the origin of the loop so we can add metadata in MIR, but we don't
+                // have to spawn the body (when lowering to MIR we'll also sync after the
+                // loop).
+                let tapir_loop_spawn = matches!(source, hir::LoopSource::CilkFor);
+                ExprKind::Loop { body, tapir_loop_spawn }
             }
             hir::ExprKind::Field(source, ..) => {
                 let mut kind = ExprKind::Field {

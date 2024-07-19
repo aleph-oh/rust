@@ -186,10 +186,8 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn br(&mut self, dest: &'ll BasicBlock) {
-        unsafe {
-            llvm::LLVMBuildBr(self.llbuilder, dest);
-        }
+    fn br(&mut self, dest: &'ll BasicBlock) -> &'ll Value {
+        unsafe { llvm::LLVMBuildBr(self.llbuilder, dest) }
     }
 
     fn cond_br(
@@ -678,6 +676,42 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 llvm::MD_nonnull as c_uint,
                 llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0),
             );
+        }
+    }
+
+    fn tapir_loop_spawn_strategy_metadata(&mut self, branch: &'ll Value) {
+        // NOTE(jhilton): I think we can't use llvm.loop.mustprogress since ranges can be unbounded.
+        const TAPIR_LOOP_SPAWN_STRATEGY: &'static str = "tapir.loop.spawn.strategy";
+        const LOOP_DIVIDE_AND_CONQUER: i32 = 1;
+        unsafe {
+            let temp = llvm::TemporaryMetadataNode::new(self.cx.llcx);
+            // First we need to make the metadata for tapir.loop.spawn.strategy.
+            let metadata_name = llvm::LLVMMDStringInContext2(
+                self.cx.llcx,
+                TAPIR_LOOP_SPAWN_STRATEGY.as_ptr() as *const c_char,
+                TAPIR_LOOP_SPAWN_STRATEGY.as_bytes().len(),
+            );
+            // Now we need to make the value for the divide-and-conquer strategy.
+            let metadata_value = llvm::LLVMValueAsMetadata(self.const_i32(LOOP_DIVIDE_AND_CONQUER));
+            // Bundle them together into a single node.
+            let tapir_metadata = [metadata_name, metadata_value];
+            let tapir_metadata = llvm::LLVMMDNodeInContext2(
+                self.cx.llcx,
+                tapir_metadata.as_ptr(),
+                tapir_metadata.len(),
+            );
+
+            // Now group the loop with all its associated nodes and assign the node to the branch.
+            let v = [&temp, tapir_metadata];
+            let node = llvm::LLVMMDNodeInContext2(self.cx.llcx, v.as_ptr(), v.len());
+            // Make the node self-referential: this is what loops expect.
+            llvm::LLVMRustReplaceMDOperandWith(node, 0, node);
+
+            llvm::LLVMSetMetadata(
+                branch,
+                llvm::MD_loop as c_uint,
+                llvm::LLVMMetadataAsValue(self.cx.llcx, node),
+            )
         }
     }
 

@@ -142,6 +142,11 @@ fn split_block(
         statements: block_data.statements.split_off(location.statement_index),
         terminator: block_data.terminator.take(),
         is_cleanup: block_data.is_cleanup,
+        // This is false because in this context, split_block is used in ways where both the first and second basic
+        // block are relevant. As a result, the first basic block (if it was initially the loop header) is still the
+        // loop header, especially since none of the back-edges are redirected here (even if they were,
+        // is_parallel_loop_header should be changed in that code).
+        is_parallel_loop_header: false,
     };
 
     basic_blocks.push(new_block)

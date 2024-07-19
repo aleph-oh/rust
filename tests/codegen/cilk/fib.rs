@@ -17,7 +17,7 @@ pub fn fib(n: u8) -> usize {
         cilk_sync;
         x + y
     }
-    // CHECK: llvm.tapir.runtime.stop
+    // CHECK: llvm.tapir.runtime.end
 }
 
 fn main() {

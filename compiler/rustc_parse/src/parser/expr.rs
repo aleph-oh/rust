@@ -1457,6 +1457,8 @@ impl<'a> Parser<'a> {
                     assert!(this.eat_keyword(kw::For));
                     this.parse_expr_for(None, this.prev_token.span)
                 }
+            } else if this.eat_keyword(kw::CilkFor) {
+                this.parse_expr_cilk_for(None, this.prev_token.span)
             } else if this.eat_keyword(kw::While) {
                 this.parse_expr_while(None, this.prev_token.span)
             } else if let Some(label) = this.eat_label() {
@@ -2793,16 +2795,42 @@ impl<'a> Parser<'a> {
         Ok((pat, expr))
     }
 
+    // Parses `cilk_for <src_pat> in <src_expr> <src_loop_block>` (`cilk_for` token already eaten).
+    fn parse_expr_cilk_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
+        self.parse_expr_for_any_kind(opt_label, lo, |_this| ForLoopKind::CilkFor)
+    }
+
     /// Parses `for await? <src_pat> in <src_expr> <src_loop_block>` (`for` token already eaten).
     fn parse_expr_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
-        let is_await =
-            self.token.uninterpolated_span().at_least_rust_2018() && self.eat_keyword(kw::Await);
+        self.parse_expr_for_any_kind(opt_label, lo, |this| {
+            let is_await = this.token.uninterpolated_span().at_least_rust_2018()
+                && this.eat_keyword(kw::Await);
 
-        if is_await {
-            self.sess.gated_spans.gate(sym::async_for_loop, self.prev_token.span);
+            if is_await { ForLoopKind::ForAwait } else { ForLoopKind::For }
+        })
+    }
+
+    /// Parses suffix <for>|<cilk_for> <whatever-find-kind-consumes> <src_pat> in <src_expr> <src_loop_block>.
+    /// (`for` or `cilk_for` token already eaten)
+    ///
+    /// [find_kind] is a function that may mutate the parser state and emits the kind of for-loop that was found.
+    /// Together with preconditions on [parse_expr_cilk_for], this allows one core function to handle the
+    /// top-level logic of parsing a for-loop.
+    fn parse_expr_for_any_kind(
+        &mut self,
+        opt_label: Option<Label>,
+        lo: Span,
+        find_kind: impl Fn(&mut Self) -> ForLoopKind,
+    ) -> PResult<'a, P<Expr>> {
+        let kind = find_kind(self);
+        let feature = match kind {
+            ForLoopKind::CilkFor => Some(sym::cilk),
+            ForLoopKind::ForAwait => Some(sym::async_for_loop),
+            ForLoopKind::For => None,
+        };
+        if let Some(feature) = feature {
+            self.sess.gated_spans.gate(feature, self.prev_token.span);
         }
-
-        let kind = if is_await { ForLoopKind::ForAwait } else { ForLoopKind::For };
 
         let (pat, expr) = self.parse_for_head()?;
         // Recover from missing expression in `for` loop

@@ -65,6 +65,7 @@ impl AddCallGuards {
                             source_info,
                             kind: TerminatorKind::Goto { target: *destination },
                         }),
+                        is_parallel_loop_header: false,
                     };
 
                     // Get the index it will be when inserted into the MIR

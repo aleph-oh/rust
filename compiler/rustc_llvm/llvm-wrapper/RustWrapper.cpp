@@ -764,6 +764,20 @@ extern "C" void LLVMRustGlobalAddMetadata(
   unwrap<GlobalObject>(Global)->addMetadata(Kind, *unwrap<MDNode>(MD));
 }
 
+extern "C" LLVMMetadataRef LLVMRustMDGetTemporary(LLVMContextRef C) {
+    return wrap(llvm::MDNode::getTemporary(*unwrap(C), std::nullopt).release());
+}
+
+extern "C" void LLVMRustMDDeleteTemporary(LLVMMetadataRef MD) {
+    llvm::MDNode::deleteTemporary(unwrap<MDNode>(MD));
+}
+
+extern "C" void LLVMRustReplaceMDOperandWith(
+    LLVMMetadataRef MD, size_t Index, LLVMMetadataRef New
+) {
+    unwrap<MDNode>(MD)->replaceOperandWith(Index, unwrap<Metadata>(New));
+}
+
 extern "C" LLVMRustDIBuilderRef LLVMRustDIBuilderCreate(LLVMModuleRef M) {
   return new DIBuilder(*unwrap(M));
 }

@@ -297,7 +297,7 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 self.print_expr(*source, depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl);
             }
-            Loop { body } => {
+            Loop { body, tapir_loop_spawn: _ } => {
                 print_indented!(self, "Loop (", depth_lvl);
                 print_indented!(self, "body:", depth_lvl + 1);
                 self.print_expr(*body, depth_lvl + 2);
