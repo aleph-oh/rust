@@ -1255,6 +1255,11 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     AddParallelLoopMetadata::False
                 };
                 // NOTE(jhilton): we attach the metadata to the parallel loop back edge.
+                // This is because in the structure of a loop, the back edge is more
+                // fundamental than the header and because the way LLVM detects loop metadata
+                // is by canonicalizing then checking the back edge. By adding the metadata to
+                // the back edge, we don't rely on the canonicalization succeeding, so it's a
+                // little less fragile (although I expect the canonicalization is very robust).
                 helper.funclet_br_maybe_add_metadata(
                     self,
                     bx,
