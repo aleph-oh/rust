@@ -921,6 +921,12 @@ pub struct Crate<'hir> {
 }
 
 #[derive(Debug, Clone, Copy, HashStable_Generic)]
+pub struct CilkSpawn<'hir> {
+    pub def_id: LocalDefId,
+    pub body: &'hir Expr<'hir>
+}
+
+#[derive(Debug, Clone, Copy, HashStable_Generic)]
 pub struct Closure<'hir> {
     pub def_id: LocalDefId,
     pub binder: ClosureBinder,
@@ -1934,7 +1940,7 @@ pub enum ExprKind<'hir> {
     Yield(&'hir Expr<'hir>, YieldSource),
 
     /// An expression that makes the right-hand side potentially parallel with the continuation.
-    CilkSpawn(&'hir Expr<'hir>),
+    CilkSpawn(&'hir CilkSpawn<'hir>),
 
     /// An expression that implicitly syncs at the end of the contained block.
     CilkScope(&'hir Block<'hir>),
@@ -3334,6 +3340,11 @@ pub enum ForeignItemKind<'hir> {
 /// A variable captured by a closure.
 #[derive(Debug, Copy, Clone, HashStable_Generic)]
 pub struct Upvar {
+    /// First span where it is accessed (there can be multiple).
+    pub span: Span,
+}
+
+pub struct CilkUpvar {
     /// First span where it is accessed (there can be multiple).
     pub span: Span,
 }

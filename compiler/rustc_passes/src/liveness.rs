@@ -1045,7 +1045,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
             }
 
             // NOTE(jhilton): This should be correct. We just need to include the contained expression in our liveness analysis.
-            hir::ExprKind::CilkSpawn(expr) => self.propagate_through_expr(expr, succ),
+            hir::ExprKind::CilkSpawn(inner) => self.propagate_through_expr(inner.body, succ),
             // As long as our liveness in MIR is correct, this shouldn't matter.
             hir::ExprKind::CilkScope(block) => self.propagate_through_block(block, succ),
 
