@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 //! ### Inferring borrow kinds for upvars
 //!
 //! Whenever there is a closure expression, we need to determine how each
@@ -150,6 +152,12 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
                 let body = self.fcx.tcx.hir().body(anon_const.body);
                 self.visit_body(body);
             }
+            hir::ExprKind::CilkSpawn(inner) => {
+                // let body = self.fcx.tcx.hir().body();
+                // self.visit_expr(expr);
+                // let expr_ref = &expr; 
+                self.fcx.analyze_cilk_spawn(expr.hir_id, expr.span, inner);
+            }
             _ => {}
         }
 
@@ -158,6 +166,41 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
+    fn analyze_cilk_spawn(
+        &self,
+        cilk_spawn_hir_id: hir::HirId,
+        span: Span,
+        body: &'tcx hir::CilkSpawn<'tcx>
+    ){
+        println!("YAY HERE WE ARE!");
+
+        let ty = self.node_ty(cilk_spawn_hir_id);
+
+        println!("type of expression: {:?}", ty);
+
+        let please = body.def_id;
+
+        let mut delegate = InferBorrowKind {
+            closure_def_id: please,
+            capture_information: Default::default(),
+            fake_reads: Default::default(),
+        };
+
+        // compiles up to here ^
+
+        // euv::CilkExprUseVisitor::new(
+        //     &mut delegate,
+        //     &self.infcx,
+        //     cilk_spawn_hir_id,
+        //     self.param_env,
+        //     &self.typeck_results.borrow(),
+        // ).consume_expr(body);
+
+        // debug!(
+        //     "For closure={:?}, capture_information={:#?}",
+        //     closure_def_id, delegate.capture_information
+        // );
+    }
     /// Analysis starting point.
     #[instrument(skip(self, body), level = "debug")]
     fn analyze_closure(
