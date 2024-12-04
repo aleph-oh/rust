@@ -166,19 +166,20 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
+    // #[instrument(skip(self, inner), level = "debug")]
     fn analyze_cilk_spawn(
         &self,
         cilk_spawn_hir_id: hir::HirId,
         span: Span,
-        body: &'tcx hir::CilkSpawn<'tcx>
+        inner: &'tcx hir::CilkSpawn<'tcx>
     ){
         println!("YAY HERE WE ARE!");
 
-        let ty = self.node_ty(cilk_spawn_hir_id);
+        let ty = self.node_ty(inner.body.hir_id);
 
         println!("type of expression: {:?}", ty);
 
-        let please = body.def_id;
+        let please = inner.def_id;
 
         let mut delegate = InferBorrowKind {
             closure_def_id: please,
@@ -186,20 +187,26 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             fake_reads: Default::default(),
         };
 
-        // compiles up to here ^
+        euv::ExprUseVisitor::new(
+            &mut delegate,
+            &self.infcx,
+            please,
+            self.param_env,
+            &self.typeck_results.borrow(),
+        ).consume_expr(inner.body);
 
-        // euv::CilkExprUseVisitor::new(
-        //     &mut delegate,
-        //     &self.infcx,
-        //     cilk_spawn_hir_id,
-        //     self.param_env,
-        //     &self.typeck_results.borrow(),
-        // ).consume_expr(body);
+        debug!(
+            "For closure={:?}, capture_information={:#?}",
+            please, delegate.capture_information
+        );
 
-        // debug!(
-        //     "For closure={:?}, capture_information={:#?}",
-        //     closure_def_id, delegate.capture_information
-        // );
+        self.log_capture_analysis_first_pass(please, &delegate.capture_information, span);
+    
+        let (capture_information, closure_kind, origin) = self
+            .process_collected_capture_information(rustc_ast::CaptureBy::Ref, delegate.capture_information);
+
+        self.compute_min_captures(please, capture_information, span);
+
     }
     /// Analysis starting point.
     #[instrument(skip(self, body), level = "debug")]
