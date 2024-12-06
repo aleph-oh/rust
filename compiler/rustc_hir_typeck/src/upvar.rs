@@ -166,7 +166,7 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
-    // #[instrument(skip(self, inner), level = "debug")]
+    #[instrument(skip(self, inner), level = "debug")]
     fn analyze_cilk_spawn(
         &self,
         cilk_spawn_hir_id: hir::HirId,
@@ -200,12 +200,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             please, delegate.capture_information
         );
 
-        self.log_capture_analysis_first_pass(please, &delegate.capture_information, span);
+        // self.log_capture_analysis_first_pass(please, &delegate.capture_information, span);
     
-        let (capture_information, closure_kind, origin) = self
-            .process_collected_capture_information(rustc_ast::CaptureBy::Ref, delegate.capture_information);
+        // let (capture_information, closure_kind, origin) = self
+        //     .process_collected_capture_information(rustc_ast::CaptureBy::Ref, delegate.capture_information);
 
-        self.compute_min_captures(please, capture_information, span);
+        // self.compute_min_captures(please, capture_information, span);
 
     }
     /// Analysis starting point.
@@ -1928,30 +1928,29 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
         ));
     }
 
-    #[instrument(skip(self), level = "debug")]
+    // #[instrument(skip(self), level = "debug")]
     fn borrow(
         &mut self,
         place_with_id: &PlaceWithHirId<'tcx>,
         diag_expr_id: hir::HirId,
         bk: ty::BorrowKind,
     ) {
+        println!("delegate borrow");
         let PlaceBase::Upvar(upvar_id) = place_with_id.place.base else { return };
         assert_eq!(self.closure_def_id, upvar_id.closure_expr_id);
 
         // The region here will get discarded/ignored
         let capture_kind = ty::UpvarCapture::ByRef(bk);
-
         // We only want repr packed restriction to be applied to reading references into a packed
         // struct, and not when the data is being moved. Therefore we call this method here instead
         // of in `restrict_capture_precision`.
         let (place, mut capture_kind) =
             restrict_repr_packed_field_ref_capture(place_with_id.place.clone(), capture_kind);
-
         // Raw pointers don't inherit mutability
         if place_with_id.place.deref_tys().any(Ty::is_unsafe_ptr) {
             capture_kind = ty::UpvarCapture::ByRef(ty::BorrowKind::ImmBorrow);
         }
-
+        println!("delegate borrow6");
         self.capture_information.push((
             place,
             ty::CaptureInfo {
@@ -1960,6 +1959,8 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
                 capture_kind,
             },
         ));
+        println!("delegate borrow7");
+
     }
 
     #[instrument(skip(self), level = "debug")]

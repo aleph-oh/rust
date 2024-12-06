@@ -599,9 +599,11 @@ impl<'a, 'tcx> ExprUseVisitor<'a, 'tcx> {
     /// consumed or borrowed as part of the automatic adjustment
     /// process.
     fn walk_adjustment(&mut self, expr: &hir::Expr<'_>) {
+        println!("CAIATHEN WALK_ADJUSTMENT");
         let adjustments = self.mc.typeck_results.expr_adjustments(expr);
         let mut place_with_id = return_if_err!(self.mc.cat_expr_unadjusted(expr));
         for adjustment in adjustments {
+            println!("yuck");
             debug!("walk_adjustment expr={:?} adj={:?}", expr, adjustment);
             match adjustment.kind {
                 adjustment::Adjust::NeverToAny

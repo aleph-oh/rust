@@ -381,7 +381,7 @@ impl<'a, 'tcx> MemCategorizationContext<'a, 'tcx> {
         }
     }
 
-    #[instrument(level = "debug", skip(self, span), ret)]
+    // #[instrument(level = "debug", skip(self, span), ret)]
     pub(crate) fn cat_res(
         &self,
         hir_id: hir::HirId,
@@ -406,11 +406,30 @@ impl<'a, 'tcx> MemCategorizationContext<'a, 'tcx> {
             }
 
             Res::Local(var_id) => {
-                if self.upvars.is_some_and(|upvars| upvars.contains_key(&var_id)) {
-                    self.cat_upvar(hir_id, var_id)
-                } else {
+                // CAIATHEN CILKSPAWN is failing HERE
+                println!("cat_res Local");
+                if let Some(upvars) = self.upvars{
+                    if upvars.contains_key(&var_id){
+                        self.cat_upvar(hir_id, var_id)
+                    }else{
+                        println!("NOT self.upvars.contains_key");
+                        Ok(PlaceWithHirId::new(hir_id, expr_ty, PlaceBase::Local(var_id), Vec::new()))
+                    }
+                }else{
+                    println!("NOT self.upvars.is_some");
                     Ok(PlaceWithHirId::new(hir_id, expr_ty, PlaceBase::Local(var_id), Vec::new()))
                 }
+                // if self.upvars.is_some(){
+                //     println!("self.upvars.is_some");
+                // }
+                // if self.upvars.unwrap().contains_key(&var_id){
+                //     println!("self.upvars.contains_key");
+                // }
+                // if self.upvars.is_some_and(|upvars| upvars.contains_key(&var_id)) {
+                //     self.cat_upvar(hir_id, var_id)
+                // } else {
+                //     Ok(PlaceWithHirId::new(hir_id, expr_ty, PlaceBase::Local(var_id), Vec::new()))
+                // }
             }
 
             def => span_bug!(span, "unexpected definition in memory categorization: {:?}", def),
