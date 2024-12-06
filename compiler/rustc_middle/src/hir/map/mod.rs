@@ -39,10 +39,10 @@ pub fn associated_body(node: Node<'_>) -> Option<(LocalDefId, BodyId)> {
             ..
         }) => Some((owner_id.def_id, *body)),
 
-        Node::Expr(Expr { kind: ExprKind::CilkSpawn(CilkSpawn { def_id, body, .. }), .. }) => {
-            let expr_id = BodyId{ hir_id: (*body).hir_id };
-            Some((*def_id, expr_id))
-        }
+        // Node::Expr(Expr { kind: ExprKind::CilkSpawn(CilkSpawn { def_id, body, .. }), .. }) => {
+        //     let expr_id = BodyId{ hir_id: (*body).hir_id };
+        //     Some((*def_id, expr_id))
+        // }
 
         Node::Expr(Expr { kind: ExprKind::Closure(Closure { def_id, body, .. }), .. }) => {
             Some((*def_id, *body))
@@ -50,6 +50,18 @@ pub fn associated_body(node: Node<'_>) -> Option<(LocalDefId, BodyId)> {
 
         Node::AnonConst(constant) => Some((constant.def_id, constant.body)),
         Node::ConstBlock(constant) => Some((constant.def_id, constant.body)),
+
+        _ => None,
+    }
+}
+
+#[inline]
+pub fn associated_cilk_spawn(node: Node<'_>) -> Option<&Expr<'_>> {
+    match node {
+        Node::Expr(Expr { kind: ExprKind::CilkSpawn(CilkSpawn { def_id: _, body }), .. }) => {
+            println!("OUCH");
+            Some(*body)
+        }
 
         _ => None,
     }
@@ -307,6 +319,10 @@ impl<'hir> Map<'hir> {
         associated_body(self.tcx.parent_hir_node(hir_id)).unwrap().0
     }
 
+    pub fn maybe_cilk_spawn_owned_by(self, id: LocalDefId)-> Option<&'hir Expr<'hir>>{
+        let node = self.tcx.opt_hir_node_by_def_id(id)?;
+        associated_cilk_spawn(node)
+    }
     /// Given a `LocalDefId`, returns the `BodyId` associated with it,
     /// if the node is a body owner, otherwise returns `None`.
     pub fn maybe_body_owned_by(self, id: LocalDefId) -> Option<BodyId> {
