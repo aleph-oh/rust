@@ -381,7 +381,7 @@ impl<'a, 'tcx> MemCategorizationContext<'a, 'tcx> {
         }
     }
 
-    // #[instrument(level = "debug", skip(self, span), ret)]
+    #[instrument(level = "debug", skip(self, span), ret)]
     pub(crate) fn cat_res(
         &self,
         hir_id: hir::HirId,
