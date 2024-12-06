@@ -1935,7 +1935,6 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
         diag_expr_id: hir::HirId,
         bk: ty::BorrowKind,
     ) {
-        println!("delegate borrow");
         let PlaceBase::Upvar(upvar_id) = place_with_id.place.base else { return };
         assert_eq!(self.closure_def_id, upvar_id.closure_expr_id);
 
@@ -1950,7 +1949,6 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
         if place_with_id.place.deref_tys().any(Ty::is_unsafe_ptr) {
             capture_kind = ty::UpvarCapture::ByRef(ty::BorrowKind::ImmBorrow);
         }
-        println!("delegate borrow6");
         self.capture_information.push((
             place,
             ty::CaptureInfo {
@@ -1959,8 +1957,6 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
                 capture_kind,
             },
         ));
-        println!("delegate borrow7");
-
     }
 
     #[instrument(skip(self), level = "debug")]

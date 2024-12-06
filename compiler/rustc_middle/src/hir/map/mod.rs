@@ -326,11 +326,8 @@ impl<'hir> Map<'hir> {
     /// Given a `LocalDefId`, returns the `BodyId` associated with it,
     /// if the node is a body owner, otherwise returns `None`.
     pub fn maybe_body_owned_by(self, id: LocalDefId) -> Option<BodyId> {
-        println!("maybe_body_owned_by");
         let node = self.tcx.opt_hir_node_by_def_id(id)?;
-        println!("maybe_body_owned_by2");
         let (_, body_id) = associated_body(node)?;
-        println!("maybe_body_owned_by3");
         Some(body_id)
     }
 

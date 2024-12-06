@@ -15,7 +15,6 @@ pub fn provide(providers: &mut Providers) {
             return None;
         }
         let local_def_id = def_id.expect_local();
-        println!("sad");
         if let Some(body_id) = tcx.hir().maybe_body_owned_by(local_def_id.clone()) {
             let body = tcx.hir().body(body_id);
             let mut local_collector = LocalCollector::default();
@@ -30,11 +29,9 @@ pub fn provide(providers: &mut Providers) {
             if !capture_collector.upvars.is_empty() {
                 Some(tcx.arena.alloc(capture_collector.upvars))
             } else {
-                println!("providers.upvars_mentioned capture_collector.upvars.is_empty");
                 None
             }
         } else if let Some(cilk_spawn_expr) = tcx.hir().maybe_cilk_spawn_owned_by(local_def_id.clone()) {
-            println!("OUCH2");
             let mut local_collector = LocalCollector::default();
             local_collector.visit_expr(cilk_spawn_expr);
             let mut capture_collector = CaptureCollector {
@@ -47,7 +44,6 @@ pub fn provide(providers: &mut Providers) {
             if !capture_collector.upvars.is_empty() {
                 Some(tcx.arena.alloc(capture_collector.upvars))
             } else {
-                println!("providers.upvars_mentioned capture_collector.upvars.is_empty");
                 None
             }
         } else {
@@ -66,9 +62,7 @@ struct LocalCollector {
 
 impl<'tcx> Visitor<'tcx> for LocalCollector {
     fn visit_pat(&mut self, pat: &'tcx hir::Pat<'tcx>) {
-        println!("LocalCollector visit_pat");
         if let hir::PatKind::Binding(_, hir_id, ..) = pat.kind {
-            println!("LocalCollector visit_pat self.locals.insert()");
             self.locals.insert(hir_id);
         }
         intravisit::walk_pat(self, pat);
@@ -83,9 +77,7 @@ struct CaptureCollector<'a, 'tcx> {
 
 impl CaptureCollector<'_, '_> {
     fn visit_local_use(&mut self, var_id: HirId, span: Span) {
-        println!("CaptureCollector visit_local_use");
         if !self.locals.contains(&var_id) {
-            println!("CaptureCollector contains(&var_id)");
             self.upvars.entry(var_id).or_insert(hir::Upvar { span });
         }
     }
@@ -93,9 +85,7 @@ impl CaptureCollector<'_, '_> {
 
 impl<'tcx> Visitor<'tcx> for CaptureCollector<'_, 'tcx> {
     fn visit_path(&mut self, path: &hir::Path<'tcx>, _: hir::HirId) {
-        println!("CaptureCollector visit_path");
         if let Res::Local(var_id) = path.res {
-            println!("CaptureCollector inside");
             self.visit_local_use(var_id, path.span);
         }
 
@@ -103,11 +93,8 @@ impl<'tcx> Visitor<'tcx> for CaptureCollector<'_, 'tcx> {
     }
 
     fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        println!("CaptureCollector visit_expr");
         if let hir::ExprKind::Closure(closure) = expr.kind {
-            println!("CaptureCollector visit_expr2");
             if let Some(upvars) = self.tcx.upvars_mentioned(closure.def_id) {
-                println!("CaptureCollector visit_expr3");
                 // Every capture of a closure expression is a local in scope,
                 // that is moved/copied/borrowed into the closure value, and
                 // for this analysis they are like any other access to a local.
