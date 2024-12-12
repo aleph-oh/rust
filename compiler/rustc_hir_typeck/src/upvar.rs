@@ -166,7 +166,7 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
-    // #[instrument(skip(self, inner), level = "debug")]
+    #[instrument(skip(self, inner), level = "debug")]
     fn analyze_cilk_spawn(
         &self,
         cilk_spawn_hir_id: hir::HirId,
@@ -175,12 +175,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ){
         let ty = self.node_ty(inner.body.hir_id);
 
-        println!("type of expression: {:?}", ty); // this still doesn't work, TODO: either fix or remove
+        // println!("type of expression: {:?}", ty); // this still doesn't work, TODO(acai): either fix or remove
 
-        let please = inner.def_id;
+        let cilk_spawn_local_def_id = inner.def_id;
 
         let mut delegate = InferBorrowKind {
-            closure_def_id: please,
+            closure_def_id: cilk_spawn_local_def_id,
             capture_information: Default::default(),
             fake_reads: Default::default(),
         };
@@ -188,57 +188,54 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         euv::ExprUseVisitor::new(
             &mut delegate,
             &self.infcx,
-            please,
+            cilk_spawn_local_def_id,
             self.param_env,
             &self.typeck_results.borrow(),
         ).consume_expr(inner.body);
 
         debug!(
             "For closure={:?}, capture_information={:#?}",
-            please, delegate.capture_information
+            cilk_spawn_local_def_id, delegate.capture_information
         );
 
-        self.log_capture_analysis_first_pass(please, &delegate.capture_information, span);
+        self.log_capture_analysis_first_pass(cilk_spawn_local_def_id, &delegate.capture_information, span);
     
         let (capture_information, closure_kind, origin) = self
             .process_collected_capture_information(rustc_ast::CaptureBy::Ref, delegate.capture_information);
 
-        self.compute_min_captures(please, capture_information, span);
+        self.compute_min_captures(cilk_spawn_local_def_id, capture_information, span);
 
         let sync_id = self.tcx.lang_items().sync_trait().unwrap();
         let send_id = self.tcx.get_diagnostic_item(sym::Send).unwrap();
 
         // get access to min_captures
         let binding = self.typeck_results.borrow();
-        let min_captures = binding.closure_min_captures.get(&please);
+        let min_captures = binding.closure_min_captures.get(&cilk_spawn_local_def_id); // TODO(acai): I'm not actually sure this does anything... make sure it's being used correctly
 
-        // get access to upvars
-        let Some(upvars) = self.tcx.upvars_mentioned(please) else {
-            todo!();
-        };
-
-        for (&var_hir_id, .. ) in upvars.iter() {
-            let capture_type = (min_captures.unwrap().get(&var_hir_id).unwrap())[0].info.capture_kind;
-            println!("capture_information={:#?}", &capture_type);
-            let ty = self.resolve_vars_if_possible(self.node_ty(var_hir_id));
-            let res1 = self.infcx.type_implements_trait(sync_id, [ty], self.param_env)
-            .must_apply_modulo_regions();
-            let res2 = self.infcx.type_implements_trait(send_id, [ty], self.param_env)
-            .must_apply_modulo_regions();
-            println!("impl Send: {}, impl Sync: {}", res2, res1);
-            if let UpvarCapture::ByRef(kind) = capture_type{
-                if !res1{
-                    println!("ERROR");
-                }
-            } else {
-                if !res2{
-                    println!("ERROR");
+        if let Some(upvars) = self.tcx.upvars_mentioned(cilk_spawn_local_def_id) {
+            for (&var_hir_id, .. ) in upvars.iter() {
+                let capture_type = (min_captures.unwrap().get(&var_hir_id).unwrap())[0].info.capture_kind;
+                // println!("capture_information={:#?}", &capture_type);
+                let ty = self.resolve_vars_if_possible(self.node_ty(var_hir_id));
+                let impl_sync = self.infcx.type_implements_trait(sync_id, [ty], self.param_env)
+                .must_apply_modulo_regions();
+                let impl_send = self.infcx.type_implements_trait(send_id, [ty], self.param_env)
+                .must_apply_modulo_regions();
+                // println!("impl Send: {}, impl Sync: {}", impl_send, impl_sync);
+                if let UpvarCapture::ByRef(kind) = capture_type{
+                    if !impl_sync{
+                        panic!("cilk_spawn capture does not implement Sync"); // TODO(acai): emit an error instead of panicking
+                    }
+                } else {
+                    if !impl_send{
+                        panic!("cilk_spawn capture does not implement Send"); // TODO(acai): emit an error instead of panicking
+                    }
                 }
             }
-        }
+        };
     }
     /// Analysis starting point.
-    // #[instrument(skip(self, body), level = "debug")]
+    #[instrument(skip(self, body), level = "debug")]
     fn analyze_closure(
         &self,
         closure_hir_id: hir::HirId,
@@ -1155,7 +1152,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         let ty = self.resolve_vars_if_possible(self.node_ty(var_hir_id));
 
-        // TODO(caiathen) this logic actually seems useful, return to evaluate whether I need to include this
+        // TODO(acai): this logic actually seems useful, return to evaluate whether I need to include this
         let ty = match closure_clause {
             hir::CaptureBy::Value { .. } => ty, // For move closure the capture kind should be by value
             hir::CaptureBy::Ref => {
