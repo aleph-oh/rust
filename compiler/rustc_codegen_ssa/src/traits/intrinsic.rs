@@ -39,6 +39,6 @@ pub trait IntrinsicCallMethods<'tcx>: BackendTypes {
     fn sync_region_start(&mut self) -> Self::Value;
     fn tapir_runtime_start(&mut self) -> Self::Value;
     fn tapir_runtime_end(&mut self, token: Self::Value);
-    fn taskframe_create(&mut self) -> Self::Value;
-    fn taskframe_use(&mut self, token: Self::Value);
+    // fn taskframe_create(&mut self) -> Self::Value;
+    // fn taskframe_use(&mut self, token: Self::Value);
 }

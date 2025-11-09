@@ -468,17 +468,17 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         self.call_intrinsic("llvm.tapir.runtime.end", &[token]);
     }
 
-    fn taskframe_create(&mut self) -> &'ll Value {
-        let thebb = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
-        unsafe {
-            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, thebb);
-        }
-        self.call_intrinsic("llvm.taskframe.create", &[])
-    }
+    // fn taskframe_create(&mut self) -> &'ll Value {
+    //     let thebb = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
+    //     unsafe {
+    //         llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, thebb);
+    //     }
+    //     self.call_intrinsic("llvm.taskframe.create", &[])
+    // }
 
-    fn taskframe_use(&mut self, token: &'ll Value) {
-        self.call_intrinsic("llvm.taskframe.use", &[token]);
-    }
+    // fn taskframe_use(&mut self, token: &'ll Value) {
+    //     self.call_intrinsic("llvm.taskframe.use", &[token]);
+    // }
 }
 
 fn try_intrinsic<'ll>(

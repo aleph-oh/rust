@@ -128,8 +128,8 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     /// my impression that that isn't the case.
     runtime_hint_stack: SmallVec<[Bx::Value; 1]>,
 
-    /// A stack of values returned from `taskframe_create` for use in their corresponding `taskframe_use` call.
-    taskframe_hint_stack: SmallVec<[Bx::Value; 1]>,
+    // A stack of values returned from `taskframe_create` for use in their corresponding `taskframe_use` call.
+    // taskframe_hint_stack: SmallVec<[Bx::Value; 1]>,
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
@@ -230,7 +230,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         sync_region: None,
         parallel_back_edges: BitSet::new_empty(mir.basic_blocks.len()),
         runtime_hint_stack: SmallVec::new(),
-        taskframe_hint_stack: SmallVec::new(),
+        // taskframe_hint_stack: SmallVec::new(),
     };
 
     // It may seem like we should iterate over `required_consts` to ensure they all successfully
@@ -293,15 +293,15 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
-    let uses_cilk_control_flow_no_sync = || {
-        mir.basic_blocks.iter().any(|bb| {
-            matches!(
-                bb.terminator().kind,
-                mir::TerminatorKind::Detach { .. }
-                    | mir::TerminatorKind::Reattach { .. }
-            )
-        })
-    };
+    // let uses_cilk_control_flow_no_sync = || {
+    //     mir.basic_blocks.iter().any(|bb| {
+    //         matches!(
+    //             bb.terminator().kind,
+    //             mir::TerminatorKind::Detach { .. }
+    //                 | mir::TerminatorKind::Reattach { .. }
+    //         )
+    //     })
+    // };
 
     let parallel_back_edges = || {
         let mut seen = rustc_data_structures::fx::FxHashSet::default();
@@ -318,11 +318,11 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
-    if Bx::supports_tapir() && uses_cilk_control_flow_no_sync(){
-        // ================= TASKFRAME CREATE =================
-        let created_token: <Bx as BackendTypes>::Value = start_bx.taskframe_create(); 
-        fx.taskframe_hint_stack.push(created_token);    
-    }
+    // if Bx::supports_tapir() && uses_cilk_control_flow_no_sync(){
+    //     // ================= TASKFRAME CREATE =================
+    //     let created_token: <Bx as BackendTypes>::Value = start_bx.taskframe_create(); 
+    //     fx.taskframe_hint_stack.push(created_token);    
+    // }
 
     if Bx::supports_tapir() && uses_cilk_control_flow() {
         

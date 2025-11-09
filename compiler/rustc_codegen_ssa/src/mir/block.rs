@@ -1349,7 +1349,6 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 mergeable_succ(),
             ),
 
-            // CAIATHEN(TASK4)
             // FIXME(jhilton): for backends that don't support Tapir, we can merge successors.
             // I can't use fn codegen_statement to generate taskframe create and use because they are not in the MIR (should I put them in the MIR?)
             mir::TerminatorKind::Detach { spawned_task, continuation } => {
@@ -1358,7 +1357,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     // let orig: &BasicBlock = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
                     let continuation = self.llbb(continuation);
 
-                    let spawned_task_bx = &mut Bx::build(self.cx, spawned_task);
+                    // let spawned_task_bx = &mut Bx::build(self.cx, spawned_task);
 
                     // ================= aloca insertion experiments =================
                     // bx.tcx().types.bool
@@ -1370,14 +1369,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     // let scratch = PlaceRef::alloca(bx, self.fn_abi.ret.layout);
                     
                     // ================= TASKFRAME USE in spawned_task_bx =================
-                    let token = self
-                        .taskframe_hint_stack
-                        .pop()
-                        .expect("should always hint creating taskframe before using it!");
-                    spawned_task_bx.taskframe_use(token); 
+                    // let token = self
+                    //     .taskframe_hint_stack
+                    //     .pop()
+                    //     .expect("should always hint creating taskframe before using it!");
+                    // spawned_task_bx.taskframe_use(token); 
 
-                    // Is this necessary? Including it causes ./x build error
-                    // drop(spawned_task_bx); 
 
                     // ================= TERMINATOR =================
                     bx.detach(spawned_task, continuation, self.sync_region());
