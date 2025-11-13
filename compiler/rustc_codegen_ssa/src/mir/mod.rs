@@ -281,7 +281,6 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     // Apply debuginfo to the newly allocated locals.
     fx.debug_introduce_locals(&mut start_bx);
 
-    // CAIATHEN(TASK4)
     let uses_cilk_control_flow = || {
         mir.basic_blocks.iter().any(|bb| {
             matches!(
@@ -292,16 +291,6 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
             )
         })
     };
-
-    // let uses_cilk_control_flow_no_sync = || {
-    //     mir.basic_blocks.iter().any(|bb| {
-    //         matches!(
-    //             bb.terminator().kind,
-    //             mir::TerminatorKind::Detach { .. }
-    //                 | mir::TerminatorKind::Reattach { .. }
-    //         )
-    //     })
-    // };
 
     let parallel_back_edges = || {
         let mut seen = rustc_data_structures::fx::FxHashSet::default();
@@ -318,16 +307,15 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
-    // if Bx::supports_tapir() && uses_cilk_control_flow_no_sync(){
-    //     // ================= TASKFRAME CREATE =================
-    //     let created_token: <Bx as BackendTypes>::Value = start_bx.taskframe_create(); 
-    //     fx.taskframe_hint_stack.push(created_token);    
-    // }
+    if fx.mir.orphaning {
+        println!("codegen ssa found orphaning in fx.mir");
+    }
 
-    if Bx::supports_tapir() && uses_cilk_control_flow() {
+    if Bx::supports_tapir() && uses_cilk_control_flow() { //  && !fx.mir.orphaning
         
         // Add a sync region at the top of the function, so we can use it later.
         fx.sync_region = Some(start_bx.sync_region_start());
+        println!("codegen ssa adding sync region");
 
         // Let's figure out the parallel back-edges. These are edges into parallel
         // loop headers.

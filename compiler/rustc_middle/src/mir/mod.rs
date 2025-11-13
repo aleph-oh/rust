@@ -410,6 +410,8 @@ pub struct Body<'tcx> {
     /// If `-Cinstrument-coverage` is not active, or if an individual function
     /// is not eligible for coverage, then this should always be `None`.
     pub function_coverage_info: Option<Box<coverage::FunctionCoverageInfo>>,
+
+    pub orphaning: bool,
 }
 
 impl<'tcx> Body<'tcx> {
@@ -424,6 +426,7 @@ impl<'tcx> Body<'tcx> {
         span: Span,
         coroutine: Option<Box<CoroutineInfo<'tcx>>>,
         tainted_by_errors: Option<ErrorGuaranteed>,
+        orphaning: bool
     ) -> Self {
         // We need `arg_count` locals, and one for the return place.
         assert!(
@@ -451,6 +454,7 @@ impl<'tcx> Body<'tcx> {
             injection_phase: None,
             tainted_by_errors,
             function_coverage_info: None,
+            orphaning,
         };
         body.is_polymorphic = body.has_non_region_param();
         body
@@ -480,6 +484,7 @@ impl<'tcx> Body<'tcx> {
             injection_phase: None,
             tainted_by_errors: None,
             function_coverage_info: None,
+            orphaning: false
         };
         body.is_polymorphic = body.has_non_region_param();
         body

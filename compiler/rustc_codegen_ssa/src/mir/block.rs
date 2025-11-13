@@ -1354,27 +1354,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::TerminatorKind::Detach { spawned_task, continuation } => {
                 let spawned_task = self.llbb(spawned_task);
                 if Bx::supports_tapir() {
-                    // let orig: &BasicBlock = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
                     let continuation = self.llbb(continuation);
-
-                    // let spawned_task_bx = &mut Bx::build(self.cx, spawned_task);
-
-                    // ================= aloca insertion experiments =================
-                    // bx.tcx().types.bool
-                    // spawned_task_bx.alloca(fake_ty, spawned_task_bx.layout_of(ty::Float(FloatTy::F32)).layout.align.abi);
-                    // let fake_ty = spawned_task_bx.cx().type_i32();
-                    // spawned_task_bx.alloca(fake_ty, spawned_task_bx.layout_of(spawned_task_bx.tcx().types.i32).layout.align.abi);
-                    
-                    // TODO: TRY THIS
-                    // let scratch = PlaceRef::alloca(bx, self.fn_abi.ret.layout);
-                    
-                    // ================= TASKFRAME USE in spawned_task_bx =================
-                    // let token = self
-                    //     .taskframe_hint_stack
-                    //     .pop()
-                    //     .expect("should always hint creating taskframe before using it!");
-                    // spawned_task_bx.taskframe_use(token); 
-
 
                     // ================= TERMINATOR =================
                     bx.detach(spawned_task, continuation, self.sync_region());

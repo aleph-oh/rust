@@ -1658,12 +1658,6 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     )
                 }));
 
-                // if let hir::ExprKind::Path(qpath) = shadow_init.kind {
-                //     if let hir::QPath::Resolved(_ty, p) = qpath {
-                //         p.res = hir::def::Res::Local(pat.hir_id);
-                //     }
-                // }
-
                 // create Pat for shadowing variable
                 let shadow_pat_id = self.next_node_id();
                 let shadow_pat = self.lower_pat(

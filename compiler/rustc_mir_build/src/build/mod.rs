@@ -234,6 +234,7 @@ struct Builder<'a, 'tcx> {
     // the root (most of them do) and saves us from retracing many sub-paths
     // many times, and rechecking many nodes.
     lint_level_roots_cache: GrowableBitSet<hir::ItemLocalId>,
+    orphaning: bool,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, hir::HirId, Capture<'tcx>>;
@@ -460,6 +461,16 @@ fn construct_fn<'tcx>(
     let span = tcx.def_span(fn_def);
     let fn_id = tcx.local_def_id_to_hir_id(fn_def);
 
+    // Access attributes
+    let attrs = tcx.hir().attrs(fn_id);    
+    let orphaning = attrs.iter().any(|a| a.has_name(sym::orphaning));
+    
+    // let parent_def_id = tcx.parent(fn_def);
+
+    if orphaning {
+        println!("found orphaning attr for {fn_id}");
+    }
+
     // The representation of thir for `-Zunpretty=thir-tree` relies on
     // the entry expression being the last element of `thir.exprs`.
     assert_eq!(expr.as_usize(), thir.exprs.len() - 1);
@@ -528,6 +539,7 @@ fn construct_fn<'tcx>(
         return_ty,
         return_ty_span,
         coroutine,
+        orphaning,
     );
 
     let call_site_scope =
@@ -605,6 +617,7 @@ fn construct_const<'a, 'tcx>(
         const_ty,
         const_ty_span,
         None,
+        false,
     );
 
     let mut block = START_BLOCK;
@@ -746,6 +759,7 @@ fn construct_error(tcx: TyCtxt<'_>, def_id: LocalDefId, guar: ErrorGuaranteed) -
         span,
         coroutine,
         Some(guar),
+        false,
     )
 }
 
@@ -761,6 +775,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         return_ty: Ty<'tcx>,
         return_span: Span,
         coroutine: Option<Box<CoroutineInfo<'tcx>>>,
+        orphaning: bool,
     ) -> Builder<'a, 'tcx> {
         let tcx = infcx.tcx;
         let attrs = tcx.hir().attrs(hir_id);
@@ -807,6 +822,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             unit_temp: None,
             var_debug_info: vec![],
             lint_level_roots_cache: GrowableBitSet::new_empty(),
+            orphaning,
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);
@@ -837,6 +853,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.fn_span,
             self.coroutine,
             None,
+            self.orphaning,
         )
     }
 
