@@ -459,6 +459,11 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         self.call_intrinsic("llvm.syncregion.start", &[])
     }
 
+    fn orphaning_sync_region_start(&mut self, token: &'ll Value, count: u64) {
+        let count_val = self.const_usize(count);
+        self.call_intrinsic("llvm.orphaning_syncregion.use", &[token, count_val]);
+    }
+
     fn tapir_runtime_start(&mut self) -> &'ll Value {
         self.call_intrinsic("llvm.tapir.runtime.start", &[])
     }

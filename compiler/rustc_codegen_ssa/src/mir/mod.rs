@@ -307,10 +307,6 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
-    if fx.mir.orphaning {
-        println!("codegen ssa found orphaning in fx.mir");
-    }
-
     if Bx::supports_tapir() && uses_cilk_control_flow() { //  && !fx.mir.orphaning
         
         // Add a sync region at the top of the function, so we can use it later.
@@ -322,6 +318,14 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         parallel_back_edges().for_each(|bb| {
             fx.parallel_back_edges.insert(bb);
         });
+
+        // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
+        // We add a count for the number of closures which need to be inlined by LLVM InlineFunction
+        if !fx.parallel_back_edges.is_empty() {
+            start_bx.orphaning_sync_region_start(fx.sync_region.unwrap_or_else(|| {
+                bug!("expected to have sync region!");
+            }), fx.parallel_back_edges.count() as u64);
+        }
     }
     
     // The builders will be created separately for each basic block at `codegen_block`.
