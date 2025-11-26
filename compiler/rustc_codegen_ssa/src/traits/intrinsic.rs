@@ -40,7 +40,7 @@ pub trait IntrinsicCallMethods<'tcx>: BackendTypes {
     fn sync_region_start_bb(&mut self, bb: &Self::BasicBlock) -> Self::Value;
     fn tapir_runtime_start(&mut self) -> Self::Value;
     fn tapir_runtime_end(&mut self, token: Self::Value);
-    fn orphaning_sync_region_start(&mut self, token: Self::Value, count: u64);
+    fn orphaning_syncregion(&mut self, token: Self::Value, bb: &Self::BasicBlock);
     // fn taskframe_create(&mut self) -> Self::Value;
     // fn taskframe_use(&mut self, token: Self::Value);
 }

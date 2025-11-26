@@ -423,7 +423,7 @@ impl<'a, 'gcc, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'a, 'gcc, 'tcx> {
         unimplemented!();
     }
 
-    fn orphaning_sync_region_start(&mut self, token: RValue<'gcc>, count: u64) {
+    fn orphaning_syncregion(&mut self, token: RValue<'gcc>, bb: &Self::BasicBlock) {
         unimplemented!();
     }
 

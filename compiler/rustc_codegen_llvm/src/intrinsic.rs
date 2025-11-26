@@ -465,13 +465,12 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         self.call_intrinsic("llvm.syncregion.start", &[])
     }
 
-    fn orphaning_sync_region_start(&mut self, token: &'ll Value, count: u64) {
+    fn orphaning_syncregion(&mut self, token: &'ll Value, bb: &Self::BasicBlock) {
         unsafe {
-            llvm::LLVMPositionBuilderAtEnd(self.llbuilder, 
-                llvm::LLVMGetFirstBasicBlock(self.llfn()));
+            llvm::LLVMPositionBuilderAtEnd(self.llbuilder, bb);
         }
-        let count_val = self.const_usize(count);
-        self.call_intrinsic("llvm.orphaning_syncregion.use", &[token, count_val]);
+        println!("calling llvm.orphaning.syncregionn");
+        self.call_intrinsic("llvm.orphaning.syncregionn", &[token]);
     }
 
     fn tapir_runtime_start(&mut self) -> &'ll Value {

@@ -1169,13 +1169,13 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
     pub fn codegen_block(&mut self, mut bb: mir::BasicBlock) {
-        // CAIATHEN(TASK4) I think after a new llbb is made this fn is called, which adds all the insts based off MIR
         let llbb = match self.try_llbb(bb) {
             Some(llbb) => llbb,
             None => return,
         };
         let bx = &mut Bx::build(self.cx, llbb);
         let mir = self.mir;
+
 
         // MIR basic blocks stop at any function call. This may not be the case
         // for the backend's basic blocks, in which case we might be able to
@@ -1184,6 +1184,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             let data = &mir[bb];
 
             debug!("codegen_block({:?}={:?})", bb, data);
+
+            // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
+            if self.parallel_back_edges.contains(bb) {
+                println!("self.parallel_back_edges.contains(bb)"); // why doesn't this print? do we not traverse the correct bb?
+                bx.orphaning_syncregion(*self.sync_region(), &llbb);
+            }
 
             for statement in &data.statements {
                 self.codegen_statement(bx, statement);
@@ -1250,6 +1256,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
 
             mir::TerminatorKind::Goto { target } => {
                 let add_tapir_metadata = if self.parallel_back_edges.contains(bb) {
+                    println!("AddParallelLoopMetadata::True");
                     AddParallelLoopMetadata::True
                 } else {
                     AddParallelLoopMetadata::False

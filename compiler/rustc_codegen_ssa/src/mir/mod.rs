@@ -296,13 +296,14 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     };
 
     let parallel_back_edges = || {
-        let mut seen = rustc_data_structures::fx::FxHashSet::default();
+        // let mut seen: std::collections::HashSet<_, std::hash::BuildHasherDefault<rustc_data_structures::fx::FxHasher>> = rustc_data_structures::fx::FxHashSet::default();
         mir::traversal::reverse_postorder(mir).filter_map(move |(bb, bb_data)| {
-            seen.insert(bb);
+            // seen.insert(bb);
             if let mir::TerminatorKind::Goto { target } = bb_data.terminator().kind {
                 // If the target of the jump is a parallel loop header and we've already observed
                 // it, we know this must be a loop back-edge.
-                if mir.basic_blocks[target].is_parallel_loop_header && seen.contains(&target) {
+                if mir.basic_blocks[target].is_parallel_loop_header {
+                    println!("found a parallel back edge");
                     return Some(bb);
                 }
             }
@@ -320,14 +321,9 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         // Let's figure out the parallel back-edges. These are edges into parallel
         // loop headers.
         parallel_back_edges().for_each(|bb| {
+            println!("fx.parallel_back_edges.insert(bb);");
             fx.parallel_back_edges.insert(bb);
         });
-
-        // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
-        // We add a count for the number of closures which need to be inlined by LLVM InlineFunction
-        if !fx.parallel_back_edges.is_empty() {
-            start_bx.orphaning_sync_region_start(region_0, fx.parallel_back_edges.count() as u64);
-        }
     }
     
     // The builders will be created separately for each basic block at `codegen_block`.
