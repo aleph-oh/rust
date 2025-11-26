@@ -128,6 +128,8 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     /// my impression that that isn't the case.
     runtime_hint_stack: SmallVec<[Bx::Value; 1]>,
 
+    // sync region stack to insert sync region start in detached context (first bb after detach terminator)
+    sync_region_stack: SmallVec<[Bx::Value; 1]>,
     // A stack of values returned from `taskframe_create` for use in their corresponding `taskframe_use` call.
     // taskframe_hint_stack: SmallVec<[Bx::Value; 1]>,
 }
@@ -230,6 +232,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         sync_region: None,
         parallel_back_edges: BitSet::new_empty(mir.basic_blocks.len()),
         runtime_hint_stack: SmallVec::new(),
+        sync_region_stack: SmallVec::new(),
         // taskframe_hint_stack: SmallVec::new(),
     };
 
@@ -310,8 +313,9 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     if Bx::supports_tapir() && uses_cilk_control_flow() { //  && !fx.mir.orphaning
         
         // Add a sync region at the top of the function, so we can use it later.
-        fx.sync_region = Some(start_bx.sync_region_start());
-        println!("codegen ssa adding sync region");
+        let region_0 = start_bx.sync_region_start();
+        fx.sync_region = Some(region_0);
+        fx.sync_region_stack.push(region_0);
 
         // Let's figure out the parallel back-edges. These are edges into parallel
         // loop headers.
@@ -322,9 +326,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
         // We add a count for the number of closures which need to be inlined by LLVM InlineFunction
         if !fx.parallel_back_edges.is_empty() {
-            start_bx.orphaning_sync_region_start(fx.sync_region.unwrap_or_else(|| {
-                bug!("expected to have sync region!");
-            }), fx.parallel_back_edges.count() as u64);
+            start_bx.orphaning_sync_region_start(region_0, fx.parallel_back_edges.count() as u64);
         }
     }
     
@@ -336,6 +338,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     for (bb, _) in traversal::reverse_postorder(mir) {
         fx.codegen_block(bb);
     }
+    fx.sync_region_stack.pop();
 }
 
 /// Produces, for each argument, a `Value` pointing at the

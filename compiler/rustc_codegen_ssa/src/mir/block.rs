@@ -1156,14 +1156,14 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         )
     }
 
-    fn sync_region(&self) -> Bx::Value {
+    fn sync_region(&mut self) -> &Bx::Value {
         self.try_sync_region().unwrap_or_else(|| {
             bug!("expected to have sync region!");
         })
     }
 
-    fn try_sync_region(&self) -> Option<Bx::Value> {
-        self.sync_region
+    fn try_sync_region(&mut self) -> Option<&Bx::Value> {
+        self.sync_region_stack.last()
     }
 }
 
@@ -1357,7 +1357,8 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     let continuation = self.llbb(continuation);
 
                     // ================= TERMINATOR =================
-                    bx.detach(spawned_task, continuation, self.sync_region());
+                    bx.detach(spawned_task, continuation, *self.sync_region());
+                    self.sync_region_stack.push(bx.sync_region_start_bb(&spawned_task));
                 } else {
                     bx.br(spawned_task);
                 }
@@ -1366,7 +1367,8 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::TerminatorKind::Reattach { continuation } => {
                 let continuation = self.llbb(continuation);
                 if Bx::supports_tapir() {
-                    bx.reattach(continuation, self.sync_region());
+                    self.sync_region_stack.pop();
+                    bx.reattach(continuation, *self.sync_region());
                 } else {
                     bx.br(continuation);
                 }
@@ -1375,7 +1377,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::TerminatorKind::Sync { target } => {
                 let target = self.llbb(target);
                 if Bx::supports_tapir() {
-                    bx.sync(target, self.sync_region());
+                    bx.sync(target, *self.sync_region());
                 } else {
                     bx.br(target);
                 }

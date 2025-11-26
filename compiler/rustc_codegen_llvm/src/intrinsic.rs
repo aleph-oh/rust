@@ -452,14 +452,24 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
     }
 
     fn sync_region_start(&mut self) -> &'ll Value {
-        let thebb = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
         unsafe {
-            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, thebb);
+            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, llvm::LLVMGetFirstBasicBlock(self.llfn()));
+        }
+        self.call_intrinsic("llvm.syncregion.start", &[])
+    }
+
+    fn sync_region_start_bb(&mut self, bb: &Self::BasicBlock) -> &'ll Value {
+        unsafe {
+            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, bb);
         }
         self.call_intrinsic("llvm.syncregion.start", &[])
     }
 
     fn orphaning_sync_region_start(&mut self, token: &'ll Value, count: u64) {
+        unsafe {
+            llvm::LLVMPositionBuilderAtEnd(self.llbuilder, 
+                llvm::LLVMGetFirstBasicBlock(self.llfn()));
+        }
         let count_val = self.const_usize(count);
         self.call_intrinsic("llvm.orphaning_syncregion.use", &[token, count_val]);
     }
