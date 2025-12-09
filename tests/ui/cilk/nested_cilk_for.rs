@@ -3,8 +3,9 @@ fn main(){
     nested_cilk_for();
 }
 
-// -O3 does not compile
+// -O3 does not compile TODO: fix
 fn nested_cilk_for(){
+    let a: usize = 0;
     let b: usize = 10;
     let c: usize = 100;
     let v_size = b * c;
