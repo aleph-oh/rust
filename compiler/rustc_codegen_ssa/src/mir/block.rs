@@ -1187,7 +1187,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
 
             // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
             if self.parallel_back_edges.contains(bb) {
-                println!("self.parallel_back_edges.contains(bb)"); // why doesn't this print? do we not traverse the correct bb?
+                println!("self.parallel_back_edges.contains(bb)");
                 bx.orphaning_syncregion(*self.sync_region(), &llbb);
             }
 
@@ -1256,7 +1256,6 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
 
             mir::TerminatorKind::Goto { target } => {
                 let add_tapir_metadata = if self.parallel_back_edges.contains(bb) {
-                    println!("AddParallelLoopMetadata::True");
                     AddParallelLoopMetadata::True
                 } else {
                     AddParallelLoopMetadata::False

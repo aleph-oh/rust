@@ -467,10 +467,6 @@ fn construct_fn<'tcx>(
     
     // let parent_def_id = tcx.parent(fn_def);
 
-    if orphaning {
-        println!("found orphaning attr for {fn_id}");
-    }
-
     // The representation of thir for `-Zunpretty=thir-tree` relies on
     // the entry expression being the last element of `thir.exprs`.
     assert_eq!(expr.as_usize(), thir.exprs.len() - 1);
