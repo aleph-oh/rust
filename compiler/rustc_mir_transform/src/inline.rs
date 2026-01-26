@@ -1,6 +1,6 @@
 //! Inlining pass for MIR functions
 use crate::deref_separator::deref_finder;
-use rustc_attr::InlineAttr;
+use rustc_attr::{InlineAttr, OrphaningAttr};
 use rustc_const_eval::transform::validate::validate_types;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
@@ -415,6 +415,10 @@ impl<'tcx> Inliner<'tcx> {
     ) -> Result<(), &'static str> {
         if let InlineAttr::Never = callee_attrs.inline {
             return Err("never inline hint");
+        }
+
+        if let OrphaningAttr::Hint = callee_attrs.orphaning {
+            return Err("never inline orphaning function");
         }
 
         // Reachability pass defines which functions are eligible for inlining. Generally inlining
