@@ -1187,6 +1187,8 @@ symbols! {
         or,
         or_patterns,
         ord_cmp_method,
+        orphaning,
+        orphaning_syncregion,
         other,
         out,
         overflow_checks,

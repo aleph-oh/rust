@@ -424,7 +424,7 @@ impl<'tcx> Stable<'tcx> for mir::NonDivergingIntrinsic<'tcx> {
                     count: copy_non_overlapping.count.stable(tables),
                 })
             }
-            NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop => {
+            NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop  | NonDivergingIntrinsic::TaskframeCreate | NonDivergingIntrinsic::TaskframeUse => {
                 // NOTE(jhilton): for the same reason that we don't include Detach, Reattach, or Sync,
                 // we don't include these intrinsics.
                 unreachable!()

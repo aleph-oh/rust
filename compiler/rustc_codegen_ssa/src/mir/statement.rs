@@ -111,6 +111,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             | mir::StatementKind::ConstEvalCounter
             | mir::StatementKind::PlaceMention(..)
             | mir::StatementKind::Nop => {}
+            mir::StatementKind::Intrinsic(box NonDivergingIntrinsic::TaskframeCreate) | mir::StatementKind::Intrinsic(box NonDivergingIntrinsic::TaskframeUse) => todo!()
         }
     }
 }

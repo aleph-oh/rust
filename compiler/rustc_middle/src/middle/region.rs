@@ -329,6 +329,11 @@ impl ScopeTree {
     pub fn record_scope_parent(&mut self, child: Scope, parent: Option<(Scope, ScopeDepth)>) {
         debug!("{:?}.parent = {:?}", child, parent);
 
+        if let Some(existing) = self.parent_map.get(&child) {
+            eprintln!("ERROR: Scope {:?} already has parent {:?}, trying to set to {:?}", 
+                    child, existing, parent);
+        }
+
         if let Some(p) = parent {
             let prev = self.parent_map.insert(child, p);
             assert!(prev.is_none());

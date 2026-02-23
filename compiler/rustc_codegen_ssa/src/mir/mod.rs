@@ -127,6 +127,11 @@ pub struct FunctionCx<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> {
     /// call. We might need a more complex data structure than this if the token should ever be reused, but it's
     /// my impression that that isn't the case.
     runtime_hint_stack: SmallVec<[Bx::Value; 1]>,
+
+    // sync region stack to insert sync region start in detached context (first bb after detach terminator)
+    sync_region_stack: SmallVec<[Bx::Value; 1]>,
+    // A stack of values returned from `taskframe_create` for use in their corresponding `taskframe_use` call.
+    // taskframe_hint_stack: SmallVec<[Bx::Value; 1]>,
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
@@ -227,6 +232,8 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         sync_region: None,
         parallel_back_edges: BitSet::new_empty(mir.basic_blocks.len()),
         runtime_hint_stack: SmallVec::new(),
+        sync_region_stack: SmallVec::new(),
+        // taskframe_hint_stack: SmallVec::new(),
     };
 
     // It may seem like we should iterate over `required_consts` to ensure they all successfully
@@ -234,6 +241,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     // monomorphization so we don't have to do it again.
 
     fx.per_local_var_debug_info = fx.compute_per_local_var_debug_info(&mut start_bx);
+
 
     let memory_locals = analyze::non_ssa_locals(&fx);
 
@@ -302,9 +310,12 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
         })
     };
 
-    if Bx::supports_tapir() && uses_cilk_control_flow() {
+    if Bx::supports_tapir() && uses_cilk_control_flow() { //  && !fx.mir.orphaning
+        
         // Add a sync region at the top of the function, so we can use it later.
-        fx.sync_region = Some(start_bx.sync_region_start());
+        let region_0 = start_bx.sync_region_start();
+        fx.sync_region = Some(region_0);
+        fx.sync_region_stack.push(region_0);
 
         // Let's figure out the parallel back-edges. These are edges into parallel
         // loop headers.
@@ -312,7 +323,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
             fx.parallel_back_edges.insert(bb);
         });
     }
-
+    
     // The builders will be created separately for each basic block at `codegen_block`.
     // So drop the builder of `start_llbb` to avoid having two at the same time.
     drop(start_bx);
@@ -321,6 +332,7 @@ pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
     for (bb, _) in traversal::reverse_postorder(mir) {
         fx.codegen_block(bb);
     }
+    fx.sync_region_stack.pop();
 }
 
 /// Produces, for each argument, a `Value` pointing at the

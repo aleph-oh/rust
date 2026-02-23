@@ -423,12 +423,24 @@ impl<'a, 'gcc, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'a, 'gcc, 'tcx> {
         unimplemented!();
     }
 
+    fn orphaning_syncregion(&mut self, token: RValue<'gcc>, bb: &Self::BasicBlock) {
+        unimplemented!();
+    }
+
     fn tapir_runtime_start(&mut self) -> RValue<'gcc> {
         unimplemented!();
     }
 
     fn tapir_runtime_stop(&mut self, token: RValue<'gcc>) {
-        unimplemented!()
+        unimplemented!();
+    }
+
+    fn taskframe_create(&mut self) -> RValue<'gcc> {
+        unimplemented!();
+    }
+
+    fn taskframe_use(&mut self, token: RValue<'gcc>) {
+        unimplemented!();
     }
 }
 

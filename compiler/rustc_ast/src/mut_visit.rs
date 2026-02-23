@@ -1705,3 +1705,219 @@ impl<N: DummyAstNode, T: DummyAstNode> DummyAstNode for crate::ast_traits::AstNo
         crate::ast_traits::AstNodeWrapper::new(N::dummy(), T::dummy())
     }
 }
+
+pub struct ReplaceVariable<'hir> {
+    pub target_ident: Ident,
+    pub target_id: NodeId,
+    pub new_ident: Ident,
+    pub new_id: NodeId,
+    pub map_targets: &'hir mut Vec<NodeId>,
+}
+
+impl ReplaceVariable<'_> {
+    fn visit_path_2(&mut self, Path { segments, span, tokens: _ }: &mut Path, e: &mut NodeId) {
+        self.visit_span(span); 
+        for PathSegment { ident, id, args: _ } in segments {
+            if ident.name == self.target_ident.name {
+                *ident = self.new_ident;
+                *id = self.new_id;
+                self.map_targets.push(*e);
+            }
+            // self.visit_ident(ident);
+            // self.visit_id(id);
+            // self.visit_opt(args, |args| vis.visit_generic_args(args)); // TODO: maybe I need to visit the args
+        }
+        // visit_lazy_tts(tokens, vis); // TODO: maybe I need to visit the tokens
+    }
+
+    fn noop_visit_expr_2(
+        e: &mut Expr,
+        vis: &mut ReplaceVariable<'_>,
+    ) {
+        let Expr { kind, id, span, attrs, tokens } = e;
+        match kind {
+            ExprKind::Array(exprs) => visit_thin_exprs(exprs, vis),
+            ExprKind::ConstBlock(anon_const) => {
+                vis.visit_anon_const(anon_const);
+            }
+            ExprKind::Repeat(expr, count) => {
+                vis.visit_expr(expr);
+                vis.visit_anon_const(count);
+            }
+            ExprKind::Tup(exprs) => visit_thin_exprs(exprs, vis),
+            ExprKind::Call(f, args) => {
+                vis.visit_expr(f);
+                visit_thin_exprs(args, vis);
+            }
+            ExprKind::MethodCall(box MethodCall {
+                seg: PathSegment { ident, id, args: seg_args },
+                receiver,
+                args: call_args,
+                span,
+            }) => {
+                vis.visit_ident(ident);
+                vis.visit_id(id);
+                visit_opt(seg_args, |args| vis.visit_generic_args(args));
+                vis.visit_method_receiver_expr(receiver);
+                visit_thin_exprs(call_args, vis);
+                vis.visit_span(span);
+            }
+            ExprKind::Binary(_binop, lhs, rhs) => {
+                vis.visit_expr(lhs);
+                vis.visit_expr(rhs);
+            }
+            ExprKind::Unary(_unop, ohs) => vis.visit_expr(ohs),
+            ExprKind::Cast(expr, ty) => {
+                vis.visit_expr(expr);
+                vis.visit_ty(ty);
+            }
+            ExprKind::Type(expr, ty) => {
+                vis.visit_expr(expr);
+                vis.visit_ty(ty);
+            }
+            ExprKind::AddrOf(_, _, ohs) => vis.visit_expr(ohs),
+            ExprKind::Let(pat, scrutinee, _, _) => {
+                vis.visit_pat(pat);
+                vis.visit_expr(scrutinee);
+            }
+            ExprKind::If(cond, tr, fl) => {
+                vis.visit_expr(cond);
+                vis.visit_block(tr);
+                visit_opt(fl, |fl| ensure_sufficient_stack(|| vis.visit_expr(fl)));
+            }
+            ExprKind::While(cond, body, label) => {
+                vis.visit_expr(cond);
+                vis.visit_block(body);
+                visit_opt(label, |label| vis.visit_label(label));
+            }
+            ExprKind::ForLoop { pat, iter, body, label, kind: _ } => {
+                vis.visit_pat(pat);
+                vis.visit_expr(iter);
+                vis.visit_block(body);
+                visit_opt(label, |label| vis.visit_label(label));
+            }
+            ExprKind::Loop(body, label, span) => {
+                vis.visit_block(body);
+                visit_opt(label, |label| vis.visit_label(label));
+                vis.visit_span(span);
+            }
+            ExprKind::Match(expr, arms) => {
+                vis.visit_expr(expr);
+                arms.flat_map_in_place(|arm| vis.flat_map_arm(arm));
+            }
+            ExprKind::Closure(box Closure {
+                binder,
+                capture_clause,
+                constness,
+                coroutine_kind,
+                movability: _,
+                fn_decl,
+                body,
+                fn_decl_span,
+                fn_arg_span,
+            }) => {
+                vis.visit_closure_binder(binder);
+                visit_constness(constness, vis);
+                coroutine_kind.as_mut().map(|coroutine_kind| vis.visit_coroutine_kind(coroutine_kind));
+                vis.visit_capture_by(capture_clause);
+                vis.visit_fn_decl(fn_decl);
+                vis.visit_expr(body);
+                vis.visit_span(fn_decl_span);
+                vis.visit_span(fn_arg_span);
+            }
+            ExprKind::Block(blk, label) => {
+                vis.visit_block(blk);
+                visit_opt(label, |label| vis.visit_label(label));
+            }
+            ExprKind::Gen(_capture_by, body, _) => {
+                vis.visit_block(body);
+            }
+            ExprKind::Await(expr, await_kw_span) => {
+                vis.visit_expr(expr);
+                vis.visit_span(await_kw_span);
+            }
+            ExprKind::Assign(el, er, span) => {
+                vis.visit_expr(el);
+                vis.visit_expr(er);
+                vis.visit_span(span);
+            }
+            ExprKind::AssignOp(_op, el, er) => {
+                vis.visit_expr(el);
+                vis.visit_expr(er);
+            }
+            ExprKind::Field(el, ident) => {
+                vis.visit_expr(el);
+                vis.visit_ident(ident);
+            }
+            ExprKind::Index(el, er, brackets_span) => {
+                vis.visit_expr(el);
+                vis.visit_expr(er);
+                vis.visit_span(brackets_span);
+            }
+            ExprKind::Range(e1, e2, _lim) => {
+                visit_opt(e1, |e1| vis.visit_expr(e1));
+                visit_opt(e2, |e2| vis.visit_expr(e2));
+            }
+            ExprKind::Underscore => {}
+            ExprKind::Path(qself, path) => {
+                vis.visit_qself(qself);
+                vis.visit_path_2(path, id);
+            }
+            ExprKind::Break(label, expr) => {
+                visit_opt(label, |label| vis.visit_label(label));
+                visit_opt(expr, |expr| vis.visit_expr(expr));
+            }
+            ExprKind::Continue(label) => {
+                visit_opt(label, |label| vis.visit_label(label));
+            }
+            ExprKind::Ret(expr) => {
+                visit_opt(expr, |expr| vis.visit_expr(expr));
+            }
+            ExprKind::Yeet(expr) => {
+                visit_opt(expr, |expr| vis.visit_expr(expr));
+            }
+            ExprKind::Become(expr) => vis.visit_expr(expr),
+            ExprKind::InlineAsm(asm) => vis.visit_inline_asm(asm),
+            ExprKind::FormatArgs(fmt) => vis.visit_format_args(fmt),
+            ExprKind::OffsetOf(container, fields) => {
+                vis.visit_ty(container);
+                for field in fields.iter_mut() {
+                    vis.visit_ident(field);
+                }
+            }
+            ExprKind::MacCall(mac) => vis.visit_mac_call(mac),
+            ExprKind::Struct(se) => {
+                let StructExpr { qself, path, fields, rest } = se.deref_mut();
+                vis.visit_qself(qself);
+                vis.visit_path(path);
+                fields.flat_map_in_place(|field| vis.flat_map_expr_field(field));
+                match rest {
+                    StructRest::Base(expr) => vis.visit_expr(expr),
+                    StructRest::Rest(_span) => {}
+                    StructRest::None => {}
+                }
+            }
+            ExprKind::Paren(expr) => {
+                vis.visit_expr(expr);
+            }
+            ExprKind::Yield(expr) => {
+                visit_opt(expr, |expr| vis.visit_expr(expr));
+            }
+            ExprKind::Try(expr) => vis.visit_expr(expr),
+            ExprKind::TryBlock(body) => vis.visit_block(body),
+            ExprKind::CilkSpawn(body) => vis.visit_block(body),
+            ExprKind::CilkScope(body) => vis.visit_block(body),
+            ExprKind::Lit(_) | ExprKind::IncludedBytes(..) | ExprKind::CilkSync | ExprKind::Err => {}
+        }
+        vis.visit_id(id);
+        vis.visit_span(span);
+        visit_attrs(attrs, vis);
+        visit_lazy_tts(tokens, vis);
+    }
+}
+
+impl MutVisitor for ReplaceVariable<'_> {
+    fn visit_expr(&mut self, e: &mut P<Expr>) {
+        ReplaceVariable::noop_visit_expr_2(e, self);
+    }
+}

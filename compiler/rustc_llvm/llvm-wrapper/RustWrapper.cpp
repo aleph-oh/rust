@@ -278,6 +278,8 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind) {
     return Attribute::SafeStack;
   case FnRetThunkExtern:
     return Attribute::FnRetThunkExtern;
+  case Orphaning:
+    return Attribute::Orphaning;
   }
   report_fatal_error("bad AttributeKind");
 }

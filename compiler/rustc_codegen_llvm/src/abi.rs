@@ -398,6 +398,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
         self.conv.into()
     }
 
+    // CAIATHEN(TASK3)
     fn apply_attrs_llfn(&self, cx: &CodegenCx<'ll, 'tcx>, llfn: &'ll Value) {
         let mut func_attrs = SmallVec::<[_; 3]>::new();
         if self.ret.layout.abi.is_uninhabited() {
@@ -467,7 +468,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
         let mut func_attrs = SmallVec::<[_; 2]>::new();
         if self.ret.layout.abi.is_uninhabited() {
             func_attrs.push(llvm::AttributeKind::NoReturn.create_attr(bx.cx.llcx));
-        }
+        }    // CAIATHEN(TASK3)
         if !self.can_unwind {
             func_attrs.push(llvm::AttributeKind::NoUnwind.create_attr(bx.cx.llcx));
         }

@@ -8,7 +8,6 @@ use crate::common::{self, IntPredicate};
 use crate::meth;
 use crate::traits::*;
 use crate::MemFlags;
-
 use rustc_ast as ast;
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
 use rustc_hir::lang_items::LangItem;
@@ -21,7 +20,6 @@ use rustc_span::{source_map::Spanned, sym, Span, Symbol};
 use rustc_target::abi::call::{ArgAbi, FnAbi, PassMode, Reg};
 use rustc_target::abi::{self, HasDataLayout, WrappingRange};
 use rustc_target::spec::abi::Abi;
-
 use std::cmp;
 
 // Indicates if we are in the middle of merging a BB's successor into it. This
@@ -139,6 +137,7 @@ impl<'a, 'tcx> TerminatorCodegenHelper<'tcx> {
         )
     }
 
+    // could be useful for CAIATHEN(TASK3)
     fn funclet_br_maybe_add_metadata<Bx: BuilderMethods<'a, 'tcx>>(
         &self,
         fx: &mut FunctionCx<'a, 'tcx, Bx>,
@@ -1157,14 +1156,14 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         )
     }
 
-    fn sync_region(&self) -> Bx::Value {
+    fn sync_region(&mut self) -> &Bx::Value {
         self.try_sync_region().unwrap_or_else(|| {
             bug!("expected to have sync region!");
         })
     }
 
-    fn try_sync_region(&self) -> Option<Bx::Value> {
-        self.sync_region
+    fn try_sync_region(&mut self) -> Option<&Bx::Value> {
+        self.sync_region_stack.last()
     }
 }
 
@@ -1177,6 +1176,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         let bx = &mut Bx::build(self.cx, llbb);
         let mir = self.mir;
 
+
         // MIR basic blocks stop at any function call. This may not be the case
         // for the backend's basic blocks, in which case we might be able to
         // combine multiple MIR basic blocks into a single backend basic block.
@@ -1184,6 +1184,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             let data = &mir[bb];
 
             debug!("codegen_block({:?}={:?})", bb, data);
+
+            // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
+            if self.parallel_back_edges.contains(bb) {
+                println!("self.parallel_back_edges.contains(bb)");
+                bx.orphaning_syncregion(*self.sync_region(), &llbb);
+            }
 
             for statement in &data.statements {
                 self.codegen_statement(bx, statement);
@@ -1350,11 +1356,15 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             ),
 
             // FIXME(jhilton): for backends that don't support Tapir, we can merge successors.
+            // I can't use fn codegen_statement to generate taskframe create and use because they are not in the MIR (should I put them in the MIR?)
             mir::TerminatorKind::Detach { spawned_task, continuation } => {
                 let spawned_task = self.llbb(spawned_task);
                 if Bx::supports_tapir() {
                     let continuation = self.llbb(continuation);
-                    bx.detach(spawned_task, continuation, self.sync_region());
+
+                    // ================= TERMINATOR =================
+                    bx.detach(spawned_task, continuation, *self.sync_region());
+                    self.sync_region_stack.push(bx.sync_region_start_bb(&spawned_task));
                 } else {
                     bx.br(spawned_task);
                 }
@@ -1363,7 +1373,8 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::TerminatorKind::Reattach { continuation } => {
                 let continuation = self.llbb(continuation);
                 if Bx::supports_tapir() {
-                    bx.reattach(continuation, self.sync_region());
+                    self.sync_region_stack.pop();
+                    bx.reattach(continuation, *self.sync_region());
                 } else {
                     bx.br(continuation);
                 }
@@ -1372,7 +1383,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::TerminatorKind::Sync { target } => {
                 let target = self.llbb(target);
                 if Bx::supports_tapir() {
-                    bx.sync(target, self.sync_region());
+                    bx.sync(target, *self.sync_region());
                 } else {
                     bx.br(target);
                 }

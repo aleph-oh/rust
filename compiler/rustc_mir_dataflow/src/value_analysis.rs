@@ -140,6 +140,8 @@ pub trait ValueAnalysis<'tcx> {
             // which we handle during code generation.
             NonDivergingIntrinsic::TapirRuntimeStart => {}
             NonDivergingIntrinsic::TapirRuntimeStop => {}
+            NonDivergingIntrinsic::TaskframeCreate => {}
+            NonDivergingIntrinsic::TaskframeUse => {}
         }
     }
 

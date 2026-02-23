@@ -199,6 +199,7 @@ pub enum AttributeKind {
     AllocAlign = 39,
     SanitizeSafeStack = 40,
     FnRetThunkExtern = 41,
+    Orphaning = 42,
 }
 
 /// LLVMIntPredicate
@@ -1026,6 +1027,7 @@ extern "C" {
     // Operations on instructions
     pub fn LLVMIsAInstruction(Val: &Value) -> Option<&Value>;
     pub fn LLVMGetFirstBasicBlock(Fn: &Value) -> &BasicBlock;
+    pub fn LLVMGetDetachedCtx(BB: &BasicBlock) -> &BasicBlock;
 
     // Operations on call sites
     pub fn LLVMSetInstructionCallConv(Instr: &Value, CC: c_uint);

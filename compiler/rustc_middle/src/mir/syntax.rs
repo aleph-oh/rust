@@ -456,6 +456,18 @@ pub enum NonDivergingIntrinsic<'tcx> {
     /// Although one value is accepted as a parameter, it won't be observed by any Rust caller
     /// since it's a token from `tapir_runtime_start`.
     TapirRuntimeStop,
+
+    // / Denotes a call to the intrinsic function `taskframe_create`.
+    ///
+    /// Although one value is returned, it won't be observed by any Rust caller since it's a
+    /// token for use by `taskframe_use`.
+    TaskframeCreate,
+
+    /// Denotes a call to the intrinsic function `taskframe_use`.
+    ///
+    /// Although one value is accepted as a parameter, it won't be observed by any Rust caller
+    /// since it's a token from `taskframe_create`.
+    TaskframeUse,
 }
 
 /// Describes what kind of retag is to be performed.

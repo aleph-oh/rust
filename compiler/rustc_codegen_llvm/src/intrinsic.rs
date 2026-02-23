@@ -452,7 +452,25 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
     }
 
     fn sync_region_start(&mut self) -> &'ll Value {
+        unsafe {
+            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, llvm::LLVMGetFirstBasicBlock(self.llfn()));
+        }
         self.call_intrinsic("llvm.syncregion.start", &[])
+    }
+
+    fn sync_region_start_bb(&mut self, bb: &Self::BasicBlock) -> &'ll Value {
+        unsafe {
+            llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, bb);
+        }
+        self.call_intrinsic("llvm.syncregion.start", &[])
+    }
+
+    fn orphaning_syncregion(&mut self, token: &'ll Value, bb: &Self::BasicBlock) {
+        unsafe {
+            llvm::LLVMPositionBuilderAtEnd(self.llbuilder, bb);
+        }
+        println!("calling llvm.orphaning.syncregion");
+        self.call_intrinsic("llvm.orphaning.syncregion", &[token]);
     }
 
     fn tapir_runtime_start(&mut self) -> &'ll Value {
@@ -463,6 +481,18 @@ impl<'ll, 'tcx> IntrinsicCallMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         // This intrinsic should return void anyways.
         self.call_intrinsic("llvm.tapir.runtime.end", &[token]);
     }
+
+    // fn taskframe_create(&mut self) -> &'ll Value {
+    //     let thebb = unsafe { llvm::LLVMGetFirstBasicBlock(self.llfn()) };
+    //     unsafe {
+    //         llvm::LLVMRustPositionBuilderAtStart(self.llbuilder, thebb);
+    //     }
+    //     self.call_intrinsic("llvm.taskframe.create", &[])
+    // }
+
+    // fn taskframe_use(&mut self, token: &'ll Value) {
+    //     self.call_intrinsic("llvm.taskframe.use", &[token]);
+    // }
 }
 
 fn try_intrinsic<'ll>(

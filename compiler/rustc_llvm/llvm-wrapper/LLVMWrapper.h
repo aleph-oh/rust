@@ -91,6 +91,7 @@ enum LLVMRustAttribute {
   AllocAlign = 39,
   SanitizeSafeStack = 40,
   FnRetThunkExtern = 41,
+  Orphaning = 42,
 };
 
 typedef struct OpaqueRustString *RustStringRef;

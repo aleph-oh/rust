@@ -1,3 +1,4 @@
+#![allow(unreachable_code)]
 /// This pass inserts a sync before every return terminator in a function that contains a detach.
 /// We need this to have the correct behavior: we need to make sure that functions with detaches
 /// always end with only a single task.
@@ -18,6 +19,14 @@ pub struct InsertSyncs;
 impl<'tcx> MirPass<'tcx> for InsertSyncs {
     fn run_pass(&self, _tcx: TyCtxt<'_>, body: &mut mir::Body<'tcx>) {
         trace!("Running InsertSyncs on {:?}", body.source);
+        return;
+        // if !body.insert_syncs{
+        //     return;
+        // }
+        // // ALTERNATIVELY
+        // if body.source.is_a_closure_that_wraps_cilk_sync{
+        //     return;
+        // }
         if !body_contains_detach(body) {
             return;
         }

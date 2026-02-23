@@ -700,6 +700,8 @@ impl Display for NonDivergingIntrinsic<'_> {
             }
             Self::TapirRuntimeStart => write!(f, "tapir_runtime_start()"),
             Self::TapirRuntimeStop => write!(f, "tapir_runtime_stop()"),
+            Self::TaskframeCreate => write!(f, "taskframe_create()"),
+            Self::TaskframeUse => write!(f, "taskframe_use()"),
         }
     }
 }

@@ -455,7 +455,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                 self.copy_intrinsic(&src, &dst, &count, /* nonoverlapping */ true)
             }
             // These are no-ops without a runtime to operate with, and even so they're just hints.
-            NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop => {
+            NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop | NonDivergingIntrinsic::TaskframeCreate | NonDivergingIntrinsic::TaskframeUse => {
                 Ok(())
             }
         }

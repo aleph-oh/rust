@@ -15,7 +15,7 @@ use crate::errors::{MissingFeatures, SanitizerMemtagRequiresMte, TargetFeatureDi
 use crate::llvm::AttributePlace::Function;
 use crate::llvm::{self, AllocKindFlags, Attribute, AttributeKind, AttributePlace, MemoryEffects};
 use crate::llvm_util;
-pub use rustc_attr::{InlineAttr, InstructionSetAttr, OptimizeAttr};
+pub use rustc_attr::{InlineAttr, OrphaningAttr, InstructionSetAttr, OptimizeAttr};
 
 use crate::context::CodegenCx;
 use crate::value::Value;
@@ -50,6 +50,14 @@ fn inline_attr<'ll>(cx: &CodegenCx<'ll, '_>, inline: InlineAttr) -> Option<&'ll 
             }
         }
         InlineAttr::None => None,
+    }
+}
+
+#[inline]
+fn orphaning_attr<'ll>(cx: &CodegenCx<'ll, '_>, orphaning: OrphaningAttr) -> Option<&'ll Attribute> {
+    match orphaning {
+        OrphaningAttr::Hint => Some(AttributeKind::Orphaning.create_attr(cx.llcx)),
+        OrphaningAttr::None => None,
     }
 }
 
@@ -316,6 +324,9 @@ pub fn from_fn_attrs<'ll, 'tcx>(
             codegen_fn_attrs.inline
         };
     to_add.extend(inline_attr(cx, inline));
+
+    let orphaning = codegen_fn_attrs.orphaning;
+    to_add.extend(orphaning_attr(cx, orphaning));
 
     // The `uwtable` attribute according to LLVM is:
     //
