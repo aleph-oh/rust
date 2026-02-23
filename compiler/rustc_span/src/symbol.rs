@@ -33,6 +33,7 @@ symbols! {
 
         // NOTE(jhilton): do spawn and sync make sense as unstable keywords? At some point they should
         //  probably become stable keywords.
+        //  Same applies to scope here.
 
         // Keywords that are used in stable Rust.
         As:                 "as",
@@ -75,6 +76,8 @@ symbols! {
         Abstract:           "abstract",
         Become:             "become",
         Box:                "box",
+        CilkFor:            "cilk_for",
+        CilkScope:          "cilk_scope",
         CilkSpawn:          "cilk_spawn",
         CilkSync:           "cilk_sync",
         Do:                 "do",
@@ -519,6 +522,7 @@ symbols! {
         cfi,
         cfi_encoding,
         char,
+        cilk,
         client,
         clippy,
         clobber_abi,
@@ -1183,6 +1187,8 @@ symbols! {
         or,
         or_patterns,
         ord_cmp_method,
+        orphaning,
+        orphaning_syncregion,
         other,
         out,
         overflow_checks,
@@ -1636,7 +1642,10 @@ symbols! {
         suggestion,
         sym,
         sync,
+        sync_region_start,
         t32,
+        tapir_runtime_start,
+        tapir_runtime_stop,
         target,
         target_abi,
         target_arch,

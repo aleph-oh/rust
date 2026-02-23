@@ -199,6 +199,7 @@ pub enum AttributeKind {
     AllocAlign = 39,
     SanitizeSafeStack = 40,
     FnRetThunkExtern = 41,
+    Orphaning = 42,
 }
 
 /// LLVMIntPredicate
@@ -428,6 +429,7 @@ pub enum MetadataType {
     MD_mem_parallel_loop_access = 10,
     MD_nonnull = 11,
     MD_align = 17,
+    MD_loop = 18,
     MD_type = 19,
     MD_vcall_visibility = 28,
     MD_noundef = 29,
@@ -899,6 +901,17 @@ extern "C" {
     pub fn LLVMSetMetadata<'a>(Val: &'a Value, KindID: c_uint, Node: &'a Value);
     pub fn LLVMGlobalSetMetadata<'a>(Val: &'a Value, KindID: c_uint, Metadata: &'a Metadata);
     pub fn LLVMValueAsMetadata(Node: &Value) -> &Metadata;
+    pub fn LLVMRustMDGetTemporary(C: &Context) -> &mut Metadata;
+    pub fn LLVMRustMDDeleteTemporary(Metadata: &mut Metadata);
+    /// SAFETY: there should exist exactly one reference to the value passed as [Metadata],
+    /// unless a self-reference is being created, in which case [NewMetadata] may be equal to
+    /// [Metadata].
+    /// We can't use an exclusive borrow to model this constraint.
+    pub fn LLVMRustReplaceMDOperandWith<'a>(
+        Metadata: &'a Metadata,
+        Index: size_t,
+        NewMetadata: &'a Metadata,
+    );
 
     // Operations on constants of any type
     pub fn LLVMConstNull(Ty: &Type) -> &Value;
@@ -1014,6 +1027,7 @@ extern "C" {
     // Operations on instructions
     pub fn LLVMIsAInstruction(Val: &Value) -> Option<&Value>;
     pub fn LLVMGetFirstBasicBlock(Fn: &Value) -> &BasicBlock;
+    pub fn LLVMGetDetachedCtx(BB: &BasicBlock) -> &BasicBlock;
 
     // Operations on call sites
     pub fn LLVMSetInstructionCallConv(Instr: &Value, CC: c_uint);
@@ -1063,6 +1077,23 @@ extern "C" {
     ) -> &'a Value;
     pub fn LLVMBuildResume<'a>(B: &Builder<'a>, Exn: &'a Value) -> &'a Value;
     pub fn LLVMBuildUnreachable<'a>(B: &Builder<'a>) -> &'a Value;
+    // Tapir terminators.
+    pub fn LLVMBuildDetach<'a>(
+        B: &Builder<'a>,
+        Task: &'a BasicBlock,
+        Continuation: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
+    pub fn LLVMBuildReattach<'a>(
+        B: &Builder<'a>,
+        Continuation: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
+    pub fn LLVMBuildSync<'a>(
+        B: &Builder<'a>,
+        Target: &'a BasicBlock,
+        SyncRegion: &'a Value,
+    ) -> &'a Value;
 
     pub fn LLVMBuildCleanupPad<'a>(
         B: &Builder<'a>,

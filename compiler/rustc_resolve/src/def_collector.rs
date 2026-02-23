@@ -300,6 +300,9 @@ impl<'a, 'b, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'b, 'tcx> {
     fn visit_expr(&mut self, expr: &'a Expr) {
         let parent_def = match expr.kind {
             ExprKind::MacCall(..) => return self.visit_macro_invoc(expr.id),
+            ExprKind::CilkSpawn(..) => {
+                self.create_def(expr.id, kw::Empty, DefKind::Closure, expr.span)
+            }
             ExprKind::Closure(ref closure) => {
                 // Async closures desugar to closures inside of closures, so
                 // we must create two defs.

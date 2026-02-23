@@ -322,6 +322,10 @@ impl<'cx, 'a> Context<'cx, 'a> {
             | ExprKind::Become(_)
             // We don't bother supporting nice asserts for cilk_spawn because we don't add an implicit sync or anything.
             | ExprKind::CilkSpawn(_)
+            // FIXME(jhilton): we don't bother supporting nice asserts for cilk_scope right now, but we should, since
+            // cilk_scope does evaluate to a useful type and will compile as long as the trailing expression doesn't
+            // depend on un-synced work.
+            | ExprKind::CilkScope(..)
             // We don't bother supporting nice asserts for cilk_sync because it always evaluates to unit.
             | ExprKind::CilkSync
             | ExprKind::Yield(_) => {}

@@ -1,0 +1,15 @@
+error[E0384]: cannot assign twice to immutable variable `y`
+  --> $DIR/double_initialized_in_conditionally_spawned_task.rs:13:22
+   |
+LL |     let y = 5;
+   |         -
+   |         |
+   |         first assignment to `y`
+   |         help: consider making this binding mutable: `mut y`
+LL |     if true {
+LL |         cilk_spawn { y = 1; };
+   |                      ^^^^^ cannot assign twice to immutable variable
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0384`.

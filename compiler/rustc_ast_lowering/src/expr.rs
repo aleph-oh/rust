@@ -9,10 +9,11 @@ use super::errors::{
 use super::ResolverAstLoweringExt;
 use super::{ImplTraitContext, LoweringContext, ParamMode, ParenthesizedGenericArgs};
 use crate::{FnDeclKind, ImplTraitPosition};
+use rustc_ast::mut_visit::{ReplaceVariable, MutVisitor};
 use rustc_ast::ptr::P as AstP;
 use rustc_ast::*;
 use rustc_data_structures::stack::ensure_sufficient_stack;
-use rustc_hir as hir;
+use rustc_hir::{self as hir};
 use rustc_hir::def::{DefKind, Res};
 use rustc_session::errors::report_lit_error;
 use rustc_span::source_map::{respan, Spanned};
@@ -291,9 +292,18 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 ExprKind::CilkSpawn(body) => {
                     // FIXME(jhilton): hopefully this makes it easy to, at some point, support parsing arbitrary expressions after a cilk_spawn.
                     //  In the mean time, we're doing a little extra work to make the temporary expression and pass it along into the next IR.
+                    
                     let block = self.lower_block(body, false);
                     let expr = self.expr_block(block);
-                    hir::ExprKind::CilkSpawn(self.arena.alloc(expr))
+                    let c = self.arena.alloc(hir::CilkSpawn {
+                        def_id: self.local_def_id(e.id),
+                        body: self.arena.alloc(expr),
+                    });
+                    hir::ExprKind::CilkSpawn(c)
+                }
+                ExprKind::CilkScope(body) => {
+                    let block = self.lower_block(body, false);
+                    hir::ExprKind::CilkScope(self.arena.alloc(block))
                 }
                 ExprKind::CilkSync => hir::ExprKind::CilkSync,
                 ExprKind::InlineAsm(asm) => {
@@ -1583,11 +1593,12 @@ impl<'hir> LoweringContext<'_, 'hir> {
         e: &Expr,
         pat: &Pat,
         head: &Expr,
-        body: &Block,
+        body: &AstP<Block>,
         opt_label: Option<Label>,
         loop_kind: ForLoopKind,
     ) -> hir::Expr<'hir> {
         let head = self.lower_expr_mut(head);
+        let ast_pat = pat;
         let pat = self.lower_pat(pat);
         let for_span =
             self.mark_span_with_reason(DesugaringKind::ForLoop, self.lower_span(e.span), None);
@@ -1602,10 +1613,180 @@ impl<'hir> LoweringContext<'_, 'hir> {
         };
 
         // Some(<pat>) => <body>,
+        // For cilk_for we instead perform Some(<pat>) => call < closure < cilk_spawn <body> > >.
         let some_arm = {
+
             let some_pat = self.pat_some(pat_span, pat);
-            let body_block = self.with_loop_scope(e.id, |this| this.lower_block(body, false));
-            let body_expr = self.arena.alloc(self.expr_block(body_block));
+
+            let body_expr = if matches!(loop_kind, ForLoopKind::CilkFor) {
+                let induction_var_ident = match &ast_pat.kind{
+                    PatKind::Ident (_bind, ident, _other) => *ident,
+                    _ => Ident::empty() // TODO will this ever happen?
+                };
+
+                // create NodeId and Ident for shadowing variable
+                let shadow_node_id = self.next_node_id();
+                let shadow_ident = rustc_span::symbol::Ident::from_str("shadow");
+                
+                // create PathSegment for induction variable (we use PathSegment to reference objects in Paths a.k.a namespaces)
+                let mut pathsegs = ThinVec::new();
+                let new_res = rustc_hir::def::PartialRes::new(hir::def::Res::Local(ast_pat.id));
+                let ast_pathseg_id = self.next_node_id();
+                self.resolver.partial_res_map.insert(ast_pathseg_id, new_res);
+                self.resolver.partial_res_map.insert(shadow_node_id, new_res);
+                
+
+                pathsegs.push(
+                    PathSegment { 
+                        ident: induction_var_ident, 
+                        id: ast_pathseg_id, // TODO: is this correct? I think this should be a new id because it is the id of the pathsegment, not of the pat?
+                        args: None 
+                    }
+                );
+
+                // create the init attribute for the Local Statement
+                let shadow_init = Some(self.lower_expr(&ast::Expr{
+                    span: ast_pat.span,
+                    attrs: ThinVec::new(),
+                    tokens: None,
+                    id: shadow_node_id, 
+                    kind: ExprKind::Path(
+                        None,
+                        // Some(QPath::Resolved(Some)), // FIXME this should not be None, but idk how to get this
+                        ast::Path{
+                            span: ast_pat.span,
+                            // lower_expr of a ExprKind::Path will go to lower_qpath in compiler/rustc_ast_lowering/src/path.rs and this will give us Resolved and hopefully the res in PathSegments will be correct as well
+                            // there's almost resolution here to get res: lower_res in compiler/rustc_ast_lowering/src/lib.rs
+                            tokens: None,
+                            segments: pathsegs
+                        }
+                    )
+                }));
+
+                // create Pat for shadowing variable
+                let shadow_pat_id = self.next_node_id();
+                let shadow_pat = self.lower_pat(
+                    &ast::Pat{ // I did not need to do this in AST
+                        id: shadow_pat_id,
+                        kind: PatKind::Ident(
+                            ast::BindingAnnotation(ByRef::No, Mutability::Not), // TODO: this might need to be more general
+                            shadow_ident,
+                            None // TODO: this takes Pat and maybe I could put the induction var pat here? But IDK what it does
+                        ),
+                        span: ast_pat.span,
+                        tokens: None // TODO: should this be empty?
+                    }
+                ); // lower_pat -> lower_pat_mut -> lower_pat_ident
+
+                let shadow_res = rustc_hir::def::PartialRes::new(Res::Local(shadow_pat_id));
+                let shadow_path_seg_id = self.next_node_id();
+                let shadow_path_id = self.next_node_id();
+                self.resolver.partial_res_map.insert(shadow_path_id, shadow_res);
+                self.resolver.partial_res_map.insert(shadow_path_seg_id, shadow_res);
+
+                // create Local statement
+                let shadow_local_stmt = self.stmt_let_pat(
+                    None,
+                    pat_span,
+                    shadow_init,
+                    shadow_pat,
+                    hir::LocalSource::Normal, // idk if this is correct
+                );
+
+                let mut body_clone: AstP<Block> = body.clone();
+                let mut map_targets: Vec<NodeId> = Vec::new();
+                // create new ReplaceVariable visitor
+                let mut visitor = ReplaceVariable{
+                    target_ident: induction_var_ident,
+                    target_id: ast_pat.id,
+                    new_ident: shadow_ident,
+                    new_id: shadow_path_seg_id,
+                    map_targets: &mut map_targets
+                };
+                // visit body block
+                visitor.visit_block(&mut body_clone);
+                for node_id in &map_targets{
+                    self.resolver.partial_res_map.insert(*node_id, shadow_res);
+                }
+
+                let body_block = self.with_loop_scope(e.id, |this| this.lower_block(&*body_clone, false));
+                // let body_block = self.lower_block(&*body_clone, false);
+                // Wrap the body in a cilk_spawn
+                let spawn_expr_val: rustc_hir::Expr<'_> = self.expr_spawn_block(body_block);
+                let spawn_expr = self.arena.alloc(spawn_expr_val);
+                let spawn_stmt = self.stmt(body_block.span, hir::StmtKind::Semi(spawn_expr));
+                let stmts_slice = self.arena.alloc_from_iter([shadow_local_stmt, spawn_stmt]);
+
+                // Create and register the closure DefId
+                let closure_node_id = self.next_node_id();
+
+                let closure_hir_id = self.next_id();
+                let parent_id = self.current_hir_id_owner;
+                let closure_def_id = self.create_def(
+                    parent_id.def_id,
+                    closure_node_id,
+                    kw::Empty,
+                    DefKind::Closure,
+                    body_block.span,
+                );
+                // Register the closure DefId
+                self.children.push((closure_def_id, hir::MaybeOwner::NonOwner(closure_hir_id)));
+
+                // Create the closure body
+                let inner_block = self.block_all(body_block.span, stmts_slice, None);
+                let inner_block_expr = self.expr_block(inner_block);
+                let body_id = self.lower_body(|_this| (&[], inner_block_expr));
+
+                // Create the function declaration
+                let fn_decl = self.arena.alloc(hir::FnDecl {
+                    inputs: &[],
+                    output: hir::FnRetTy::DefaultReturn(self.lower_span(body_block.span)),
+                    c_variadic: false,
+                    implicit_self: hir::ImplicitSelfKind::None,
+                    lifetime_elision_allowed: false,
+                });
+
+                // Create the closure
+                let closure_hir = self.arena.alloc(hir::Closure {
+                    def_id: closure_def_id,  // Closure gets its own DefId
+                    binder: hir::ClosureBinder::Default,
+                    capture_clause: hir::CaptureBy::Ref,
+                    bound_generic_params: &[],
+                    fn_decl,
+                    body: body_id,  // But body stays under parent DefId
+                    fn_decl_span: self.lower_span(body_block.span),
+                    fn_arg_span: Some(self.lower_span(body_block.span)),
+                    kind: hir::ClosureKind::Closure,
+                    constness: hir::Constness::NotConst,
+                });
+
+                let closure_expr_val = hir::Expr { hir_id: closure_hir_id, kind: hir::ExprKind::Closure(closure_hir), span: self.lower_span(body_block.span) };
+
+                // Create the inline and orphaning attributes
+                let inline_attr = attr::mk_attr_nested_word(&self.tcx.sess.parse_sess.attr_id_generator, AttrStyle::Outer, sym::inline, sym::always, head_span); // TODO: are these the correct spans?
+                let orphaning_attr = attr::mk_attr_word(&self.tcx.sess.parse_sess.attr_id_generator, AttrStyle::Outer, sym::orphaning, head_span); // TODO: are these the correct spans?
+                let attrs: AttrVec = thin_vec![inline_attr, orphaning_attr];
+                self.lower_attrs(closure_hir_id, &attrs);
+
+                let closure_expr = self.arena.alloc(closure_expr_val); 
+
+                // Create call
+                let empty_args: &'hir [hir::Expr<'hir>] = self.arena.alloc_from_iter([]);
+                let call_expr_val = self.expr(body_block.span, hir::ExprKind::Call(closure_expr, empty_args));
+                let call_expr = self.arena.alloc(call_expr_val);
+
+                // Create outer body
+                let outer_stmt = self.stmt(body_block.span, hir::StmtKind::Semi(call_expr));
+                let outer_stmts_slice = self.arena.alloc_from_iter([outer_stmt]);
+                let outer_block = self.block_all(body_block.span, outer_stmts_slice, None);
+                let outer_block_expr_val = self.expr_block(outer_block);
+
+                // Create body expression of the Some arm
+                self.arena.alloc(outer_block_expr_val)
+            } else {
+                let body_block = self.with_loop_scope(e.id, |this| this.lower_block(body, false));
+                self.arena.alloc(self.expr_block(body_block))
+            };
             self.arm(some_pat, body_expr)
         };
 
@@ -1617,7 +1798,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let match_expr = {
             let iter = self.expr_ident(head_span, iter, iter_pat_nid);
             let next_expr = match loop_kind {
-                ForLoopKind::For => {
+                ForLoopKind::For | ForLoopKind::CilkFor => {
                     // `Iterator::next(&mut iter)`
                     let ref_mut_iter = self.expr_mut_addr_of(head_span, iter);
                     self.expr_call_lang_item_fn(
@@ -1656,10 +1837,17 @@ impl<'hir> LoweringContext<'_, 'hir> {
         let loop_block = self.block_all(for_span, arena_vec![self; match_stmt], None);
 
         // `[opt_ident]: loop { ... }`
+        // If we have a cilk_for we want to indicate this in the loop so the header can be
+        // annotated correctly later.
+        let loop_source = if matches!(loop_kind, ForLoopKind::CilkFor) {
+            hir::LoopSource::CilkFor
+        } else {
+            hir::LoopSource::ForLoop
+        };
         let kind = hir::ExprKind::Loop(
             loop_block,
             self.lower_label(opt_label),
-            hir::LoopSource::ForLoop,
+            loop_source,
             self.lower_span(for_span.with_hi(head.span.hi())),
         );
         let loop_expr =
@@ -1695,6 +1883,17 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 // `unsafe { ... }`
                 let iter = self.arena.alloc(self.expr_unsafe(iter));
                 iter
+            }
+            ForLoopKind::CilkFor => {
+                // FIXME(jhilton): this should call something for converting to a random-access iterator
+                // or otherwise semantically check that the expression is a random-access iterator (or
+                // only work on ranges for now).
+                // `::std::iter::IntoIterator::into_iter(<head>)`
+                self.expr_call_lang_item_fn(
+                    head_span,
+                    hir::LangItem::IntoIterIntoIter,
+                    arena_vec![self; head],
+                )
             }
         };
 
@@ -2053,6 +2252,12 @@ impl<'hir> LoweringContext<'_, 'hir> {
 
     pub(super) fn expr_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
         self.expr(b.span, hir::ExprKind::Block(b, None))
+    }
+
+    fn expr_spawn_block(&mut self, e: &Expr, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
+        let c = self.expr_block(b);
+        let block = self.arena.alloc(c);
+        self.expr(b.span, hir::ExprKind::CilkSpawn(self.arena.alloc(hir::CilkSpawn{ def_id: self.local_def_id(e.id), body: block })))
     }
 
     pub(super) fn expr_array_ref(

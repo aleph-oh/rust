@@ -1457,6 +1457,8 @@ impl<'a> Parser<'a> {
                     assert!(this.eat_keyword(kw::For));
                     this.parse_expr_for(None, this.prev_token.span)
                 }
+            } else if this.eat_keyword(kw::CilkFor) {
+                this.parse_expr_cilk_for(None, this.prev_token.span)
             } else if this.eat_keyword(kw::While) {
                 this.parse_expr_while(None, this.prev_token.span)
             } else if let Some(label) = this.eat_label() {
@@ -1482,9 +1484,9 @@ impl<'a> Parser<'a> {
                     },
                 )
             } else if this.eat_keyword(kw::CilkSpawn) {
-                // FIXME(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
-                // fine to require all cilk exprs to be in a block I think.
-                this.parse_cilk_spawn_block()
+                this.parse_cilk_spawn()
+            } else if this.eat_keyword(kw::CilkScope) {
+                this.parse_cilk_scope()
             } else if this.check_inline_const(0) {
                 this.parse_const_block(lo.to(this.token.span), false)
             } else if this.may_recover() && this.is_do_catch_block() {
@@ -1939,7 +1941,7 @@ impl<'a> Parser<'a> {
     fn parse_expr_cilk_sync(&mut self) -> PResult<'a, P<Expr>> {
         let lo = self.prev_token.span;
         let kind = ExprKind::CilkSync;
-        // FIXME(jhilton): we want to add feature gating to this after we get it to minimally work.
+        self.sess.gated_spans.gate(sym::cilk, lo.to(self.prev_token.span));
         Ok(self.mk_expr(lo.to(self.prev_token.span), kind))
     }
 
@@ -2793,16 +2795,42 @@ impl<'a> Parser<'a> {
         Ok((pat, expr))
     }
 
+    // Parses `cilk_for <src_pat> in <src_expr> <src_loop_block>` (`cilk_for` token already eaten).
+    fn parse_expr_cilk_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
+        self.parse_expr_for_any_kind(opt_label, lo, |_this| ForLoopKind::CilkFor)
+    }
+
     /// Parses `for await? <src_pat> in <src_expr> <src_loop_block>` (`for` token already eaten).
     fn parse_expr_for(&mut self, opt_label: Option<Label>, lo: Span) -> PResult<'a, P<Expr>> {
-        let is_await =
-            self.token.uninterpolated_span().at_least_rust_2018() && self.eat_keyword(kw::Await);
+        self.parse_expr_for_any_kind(opt_label, lo, |this| {
+            let is_await = this.token.uninterpolated_span().at_least_rust_2018()
+                && this.eat_keyword(kw::Await);
 
-        if is_await {
-            self.sess.gated_spans.gate(sym::async_for_loop, self.prev_token.span);
+            if is_await { ForLoopKind::ForAwait } else { ForLoopKind::For }
+        })
+    }
+
+    /// Parses suffix <for>|<cilk_for> <whatever-find-kind-consumes> <src_pat> in <src_expr> <src_loop_block>.
+    /// (`for` or `cilk_for` token already eaten)
+    ///
+    /// [find_kind] is a function that may mutate the parser state and emits the kind of for-loop that was found.
+    /// Together with preconditions on [parse_expr_cilk_for], this allows one core function to handle the
+    /// top-level logic of parsing a for-loop.
+    fn parse_expr_for_any_kind(
+        &mut self,
+        opt_label: Option<Label>,
+        lo: Span,
+        find_kind: impl Fn(&mut Self) -> ForLoopKind,
+    ) -> PResult<'a, P<Expr>> {
+        let kind = find_kind(self);
+        let feature = match kind {
+            ForLoopKind::CilkFor => Some(sym::cilk),
+            ForLoopKind::ForAwait => Some(sym::async_for_loop),
+            ForLoopKind::For => None,
+        };
+        if let Some(feature) = feature {
+            self.sess.gated_spans.gate(feature, self.prev_token.span);
         }
-
-        let kind = if is_await { ForLoopKind::ForAwait } else { ForLoopKind::For };
 
         let (pat, expr) = self.parse_for_head()?;
         // Recover from missing expression in `for` loop
@@ -3415,14 +3443,38 @@ impl<'a> Parser<'a> {
             )
     }
 
-    fn parse_cilk_spawn_block(&mut self) -> PResult<'a, P<Expr>> {
-        let lo = self.token.span;
+    /// Parses the expression in cilk_spawn <expr>. Precondition: cilk_spawn already eaten.
+    fn parse_cilk_spawn(&mut self) -> PResult<'a, P<Expr>> {
+        let spawn_span = self.prev_token.span;
+        self.sess.gated_spans.gate(sym::cilk, spawn_span);
+        // FIXME(jhilton): cilk_spawn can also prefix a function call. We should figure out how to make that work, but for now it's
+        // fine to require all cilk exprs to be in a block I think. We can use parse_expr directly here, or parse_expr_res if there
+        // are restrictions we care about.
         let (attrs, body) = self.parse_inner_attrs_and_block().map_err(|mut err| {
-            err.span_label(lo, "while parsing this `cilk_spawn` expression");
+            err.span_label(spawn_span, "while parsing this `cilk_spawn` expression");
             err
         })?;
+        let body_span = body.span;
         let kind = ExprKind::CilkSpawn(body);
-        Ok(self.mk_expr_with_attrs(lo.to(self.prev_token.span), kind, attrs))
+        // The returned expression should be from the spawn token to the end of the block.
+        Ok(self.mk_expr_with_attrs(body_span.to(self.prev_token.span), kind, attrs))
+    }
+
+    /// Parses the block in cilk_scope <block>. Precondition: cilk_scope already eaten.
+    fn parse_cilk_scope(&mut self) -> PResult<'a, P<Expr>> {
+        // NOTE(jhilton): This is temporarily very similar to `parse_cilk_spawn`. Repetitiveness in parsing
+        // between syntactic structures that aren't intentionally similar isn't something I really mind,
+        // since it makes it more obvious what's being parsed.
+        let scope_span = self.prev_token.span;
+        self.sess.gated_spans.gate(sym::cilk, scope_span);
+        // cilk_scope should prefix a block, so noew we want there to be a block after this.
+        let (attrs, body) = self.parse_inner_attrs_and_block().map_err(|mut err| {
+            err.span_label(scope_span, "while parsing this `cilk_scope` expression");
+            err
+        })?;
+        let body_span = body.span;
+        let kind = ExprKind::CilkScope(body);
+        Ok(self.mk_expr_with_attrs(body_span.to(self.prev_token.span), kind, attrs))
     }
 
     fn maybe_parse_struct_expr(
@@ -3921,6 +3973,9 @@ impl MutVisitor for CondChecker<'_> {
                 self.comparison = comparison;
             }
             ExprKind::CilkSpawn(ref _block) => {
+                todo!()
+            }
+            ExprKind::CilkScope(ref _block) => {
                 todo!()
             }
             ExprKind::Unary(_, _)

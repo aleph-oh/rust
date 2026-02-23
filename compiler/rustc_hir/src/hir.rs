@@ -921,6 +921,12 @@ pub struct Crate<'hir> {
 }
 
 #[derive(Debug, Clone, Copy, HashStable_Generic)]
+pub struct CilkSpawn<'hir> {
+    pub def_id: LocalDefId,
+    pub body: &'hir Expr<'hir>
+}
+
+#[derive(Debug, Clone, Copy, HashStable_Generic)]
 pub struct Closure<'hir> {
     pub def_id: LocalDefId,
     pub binder: ClosureBinder,
@@ -1598,6 +1604,7 @@ impl Expr<'_> {
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
             ExprKind::CilkSpawn(..) => ExprPrecedence::CilkSpawn,
+            ExprKind::CilkScope(..) => ExprPrecedence::CilkScope,
             ExprKind::CilkSync => ExprPrecedence::CilkSync,
             ExprKind::Err(_) => ExprPrecedence::Err,
         }
@@ -1667,6 +1674,7 @@ impl Expr<'_> {
             | ExprKind::Cast(..)
             | ExprKind::DropTemps(..)
             | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkScope(..)
             | ExprKind::CilkSync
             | ExprKind::Err(_) => false,
         }
@@ -1753,6 +1761,7 @@ impl Expr<'_> {
             | ExprKind::Yield(..)
             | ExprKind::DropTemps(..)
             | ExprKind::CilkSpawn(..)
+            | ExprKind::CilkScope(..)
             | ExprKind::CilkSync
             | ExprKind::Err(_) => true,
         }
@@ -1931,7 +1940,10 @@ pub enum ExprKind<'hir> {
     Yield(&'hir Expr<'hir>, YieldSource),
 
     /// An expression that makes the right-hand side potentially parallel with the continuation.
-    CilkSpawn(&'hir Expr<'hir>),
+    CilkSpawn(&'hir CilkSpawn<'hir>),
+
+    /// An expression that implicitly syncs at the end of the contained block.
+    CilkScope(&'hir Block<'hir>),
 
     /// A suspension point for spawned tasks.
     CilkSync,
@@ -2049,6 +2061,8 @@ pub enum LoopSource {
     While,
     /// A `for _ in _ { .. }` loop.
     ForLoop,
+    /// A `cilk_for _ in _ { .. }` loop.
+    CilkFor,
 }
 
 impl LoopSource {
@@ -2057,6 +2071,7 @@ impl LoopSource {
             LoopSource::Loop => "loop",
             LoopSource::While => "while",
             LoopSource::ForLoop => "for",
+            LoopSource::CilkFor => "cilk_for",
         }
     }
 }
@@ -3325,6 +3340,11 @@ pub enum ForeignItemKind<'hir> {
 /// A variable captured by a closure.
 #[derive(Debug, Copy, Clone, HashStable_Generic)]
 pub struct Upvar {
+    /// First span where it is accessed (there can be multiple).
+    pub span: Span,
+}
+
+pub struct CilkUpvar {
     /// First span where it is accessed (there can be multiple).
     pub span: Span,
 }

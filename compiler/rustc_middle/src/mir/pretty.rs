@@ -588,7 +588,8 @@ where
 
     // Basic block label at the top.
     let cleanup_text = if data.is_cleanup { " (cleanup)" } else { "" };
-    writeln!(w, "{INDENT}{block:?}{cleanup_text}: {{")?;
+    let parallel_loop_header = if data.is_parallel_loop_header { " (parallel-header)" } else { "" };
+    writeln!(w, "{INDENT}{block:?}{cleanup_text}{parallel_loop_header}: {{")?;
 
     // List of statements in the middle.
     let mut current_location = Location { block, statement_index: 0 };
@@ -697,6 +698,10 @@ impl Display for NonDivergingIntrinsic<'_> {
             Self::CopyNonOverlapping(CopyNonOverlapping { src, dst, count }) => {
                 write!(f, "copy_nonoverlapping(dst = {dst:?}, src = {src:?}, count = {count:?})")
             }
+            Self::TapirRuntimeStart => write!(f, "tapir_runtime_start()"),
+            Self::TapirRuntimeStop => write!(f, "tapir_runtime_stop()"),
+            Self::TaskframeCreate => write!(f, "taskframe_create()"),
+            Self::TaskframeUse => write!(f, "taskframe_use()"),
         }
     }
 }

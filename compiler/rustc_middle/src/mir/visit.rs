@@ -298,7 +298,8 @@ macro_rules! make_mir_visitor {
                 let BasicBlockData {
                     statements,
                     terminator,
-                    is_cleanup: _
+                    is_cleanup: _,
+                    is_parallel_loop_header: _
                 } = data;
 
                 let mut index = 0;
@@ -443,7 +444,8 @@ macro_rules! make_mir_visitor {
                                 self.visit_operand(src, location);
                                 self.visit_operand(dst, location);
                                 self.visit_operand(count, location);
-                            }
+                            },
+                            NonDivergingIntrinsic::TapirRuntimeStart | NonDivergingIntrinsic::TapirRuntimeStop | NonDivergingIntrinsic::TaskframeCreate | NonDivergingIntrinsic::TaskframeUse => {},
                         }
                     }
                     StatementKind::ConstEvalCounter => {}

@@ -1,5 +1,5 @@
 use crate::mir::mono::Linkage;
-use rustc_attr::{InlineAttr, InstructionSetAttr, OptimizeAttr};
+use rustc_attr::{InlineAttr, OrphaningAttr, InstructionSetAttr, OptimizeAttr};
 use rustc_span::symbol::Symbol;
 use rustc_target::spec::SanitizerSet;
 
@@ -8,6 +8,8 @@ pub struct CodegenFnAttrs {
     pub flags: CodegenFnAttrFlags,
     /// Parsed representation of the `#[inline]` attribute
     pub inline: InlineAttr,
+    /// Parsed representation of the `#[orphaning]` attribute
+    pub orphaning: OrphaningAttr,
     /// Parsed representation of the `#[optimize]` attribute
     pub optimize: OptimizeAttr,
     /// The `#[export_name = "..."]` attribute, indicating a custom symbol a
@@ -111,6 +113,7 @@ impl CodegenFnAttrs {
         CodegenFnAttrs {
             flags: CodegenFnAttrFlags::empty(),
             inline: InlineAttr::None,
+            orphaning: OrphaningAttr::None,
             optimize: OptimizeAttr::None,
             export_name: None,
             link_name: None,

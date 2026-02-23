@@ -214,6 +214,7 @@ fn inject_edge_counter_basic_block(
             kind: TerminatorKind::Goto { target: to_bb },
         }),
         is_cleanup: false,
+        is_parallel_loop_header: false,
     });
     let edge_ref = mir_body[from_bb]
         .terminator_mut()

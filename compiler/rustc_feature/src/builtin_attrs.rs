@@ -384,6 +384,7 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
 
     // Code generation:
     ungated!(inline, Normal, template!(Word, List: "always|never"), FutureWarnFollowing, @only_local: true),
+    ungated!(orphaning, Normal, template!(Word), FutureWarnFollowing, @only_local: true),
     ungated!(cold, Normal, template!(Word), WarnFollowing, @only_local: true),
     ungated!(no_builtins, CrateLevel, template!(Word), WarnFollowing),
     ungated!(

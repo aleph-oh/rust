@@ -1283,6 +1283,53 @@ fn link_sanitizer_runtime(
     }
 }
 
+fn find_opencilk_runtime() -> PathBuf {
+    // FIXME(jhilton): do something smarter here to find the OpenCilk runtime.
+    let dir = std::env::var("OPENCILK_RT_SEARCH_DIR").expect("OPENCILK_RT_SEARCH_DIR must be set");
+    PathBuf::from(dir)
+}
+
+fn add_opencilk_runtime(sess: &Session, linker: &mut dyn Linker) {
+    // This implementation fixes a bug where linking with -static failed since originally, the OpenCilk
+    // runtime was always dynamically linked. On GNU Linux, -static forces all libraries to be linked
+    // statically. However, -Bdynamic hints that the files actually used for linking are shared objects.
+    // This caused a problem where we tried to statically link with shared objects, so instead
+    // based on if we should prefer dynamic or static linking, we use the corresponding strategy.
+
+    // On OS X, the name of the OpenCilk runtime library is different if we're dynamically linking,
+    // and is generally different from the name on other platforms.
+    let name = if sess.target.is_like_osx {
+        if sess.opts.cg.prefer_dynamic { "opencilk_osx_dynamic" } else { "opencilk_osx" }
+    } else {
+        "opencilk"
+    };
+    let verbatim = false;
+    if sess.opts.cg.prefer_dynamic {
+        // First, add the OpenCilk runtime to the search path for dynamic libraries.
+        let opencilk_runtime_search_dir = find_opencilk_runtime();
+        linker.include_path(&opencilk_runtime_search_dir);
+
+        // Now, we add an absolute path to the runtime to the rpath.
+        // We would like to do this in a more robust way, but it's very hard
+        // to modify the rpath-handling code elsewhere in this file to sometimes use
+        // absolute paths. The logic for specifying this argument looks consistent with
+        // how the other rpath-handling code works though.
+        // We can't use a relative path because moving the binary would break the rpath,
+        // even if we used $ORIGIN since the OpenCilk runtime won't move with the binary.
+        let rpath = opencilk_runtime_search_dir.to_str().expect("non-utf8 component in path");
+        linker.args(&["-Wl,-rpath", "-Xlinker", rpath]);
+
+        let as_needed = true;
+        linker.link_dylib_by_name(name, verbatim, as_needed);
+    } else {
+        // We don't need to use the whole archive option since we probably aren't re-exporting all
+        // the symbols from the OpenCilk runtime.
+        let whole_archive = false;
+        let search_paths = SearchPaths::default();
+        linker.link_staticlib_by_name(name, verbatim, whole_archive, &search_paths);
+    }
+}
+
 /// Returns a boolean indicating whether the specified crate should be ignored
 /// during LTO.
 ///
@@ -2168,6 +2215,9 @@ fn linker_with_args<'a>(
         tmpdir,
         link_output_kind,
     );
+
+    // OpenCilk runtime.
+    add_opencilk_runtime(sess, cmd);
 
     // Upstream rust crates and their non-dynamic native libraries.
     add_upstream_rust_crates(

@@ -410,6 +410,8 @@ pub struct Body<'tcx> {
     /// If `-Cinstrument-coverage` is not active, or if an individual function
     /// is not eligible for coverage, then this should always be `None`.
     pub function_coverage_info: Option<Box<coverage::FunctionCoverageInfo>>,
+
+    pub orphaning: bool,
 }
 
 impl<'tcx> Body<'tcx> {
@@ -424,6 +426,7 @@ impl<'tcx> Body<'tcx> {
         span: Span,
         coroutine: Option<Box<CoroutineInfo<'tcx>>>,
         tainted_by_errors: Option<ErrorGuaranteed>,
+        orphaning: bool
     ) -> Self {
         // We need `arg_count` locals, and one for the return place.
         assert!(
@@ -451,6 +454,7 @@ impl<'tcx> Body<'tcx> {
             injection_phase: None,
             tainted_by_errors,
             function_coverage_info: None,
+            orphaning,
         };
         body.is_polymorphic = body.has_non_region_param();
         body
@@ -480,6 +484,7 @@ impl<'tcx> Body<'tcx> {
             injection_phase: None,
             tainted_by_errors: None,
             function_coverage_info: None,
+            orphaning: false
         };
         body.is_polymorphic = body.has_non_region_param();
         body
@@ -1276,11 +1281,21 @@ pub struct BasicBlockData<'tcx> {
     /// generated (particularly for MSVC cleanup). Unwind blocks must
     /// only branch to other unwind blocks.
     pub is_cleanup: bool,
+
+    /// If true, this block is the loop header of a parallel loop. This
+    /// is used during codegen to provide appropriate attributes for
+    /// efficient Tapir parallel loops.
+    pub is_parallel_loop_header: bool,
 }
 
 impl<'tcx> BasicBlockData<'tcx> {
     pub fn new(terminator: Option<Terminator<'tcx>>) -> BasicBlockData<'tcx> {
-        BasicBlockData { statements: vec![], terminator, is_cleanup: false }
+        BasicBlockData {
+            statements: vec![],
+            terminator,
+            is_cleanup: false,
+            is_parallel_loop_header: false,
+        }
     }
 
     /// Accessor for terminator.

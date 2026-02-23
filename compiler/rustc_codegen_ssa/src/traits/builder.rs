@@ -5,7 +5,7 @@ use super::debuginfo::DebugInfoBuilderMethods;
 use super::intrinsic::IntrinsicCallMethods;
 use super::misc::MiscMethods;
 use super::type_::{ArgAbiMethods, BaseTypeMethods};
-use super::{HasCodegen, StaticBuilderMethods};
+use super::{HasCodegen, MaybeSupportsTapir, StaticBuilderMethods};
 
 use crate::common::{
     AtomicOrdering, AtomicRmwBinOp, IntPredicate, RealPredicate, SynchronizationScope, TypeKind,
@@ -40,6 +40,7 @@ pub trait BuilderMethods<'a, 'tcx>:
     + StaticBuilderMethods
     + HasParamEnv<'tcx>
     + HasTargetSpec
+    + MaybeSupportsTapir
 {
     fn build(cx: &'a Self::CodegenCx, llbb: Self::BasicBlock) -> Self;
 
@@ -57,7 +58,7 @@ pub trait BuilderMethods<'a, 'tcx>:
 
     fn ret_void(&mut self);
     fn ret(&mut self, v: Self::Value);
-    fn br(&mut self, dest: Self::BasicBlock);
+    fn br(&mut self, dest: Self::BasicBlock) -> Self::Value;
     fn cond_br(
         &mut self,
         cond: Self::Value,
@@ -82,6 +83,14 @@ pub trait BuilderMethods<'a, 'tcx>:
         funclet: Option<&Self::Funclet>,
     ) -> Self::Value;
     fn unreachable(&mut self);
+    fn detach(
+        &mut self,
+        task_llbb: Self::BasicBlock,
+        continuation_llbb: Self::BasicBlock,
+        sync_region: Self::Value,
+    );
+    fn reattach(&mut self, continuation_llbb: Self::BasicBlock, sync_region: Self::Value);
+    fn sync(&mut self, target_llbb: Self::BasicBlock, sync_region: Self::Value);
 
     fn add(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
     fn fadd(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
@@ -161,6 +170,7 @@ pub trait BuilderMethods<'a, 'tcx>:
 
     fn range_metadata(&mut self, load: Self::Value, range: WrappingRange);
     fn nonnull_metadata(&mut self, load: Self::Value);
+    fn tapir_loop_spawn_strategy_metadata(&mut self, branch: Self::Value);
 
     fn store(&mut self, val: Self::Value, ptr: Self::Value, align: Align) -> Self::Value;
     fn store_with_flags(

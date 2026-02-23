@@ -1,17 +1,22 @@
+use rustc_data_structures::fx::FxHashMap;
 use rustc_index::bit_set::{BitSet, ChunkedBitSet};
 use rustc_index::Idx;
 use rustc_middle::mir::{self, Body, CallReturnPlaces, Location, TerminatorEdges};
 use rustc_middle::ty::{self, TyCtxt};
+use tracing::instrument;
 
 use crate::drop_flag_effects_for_function_entry;
-use crate::drop_flag_effects_for_location;
 use crate::elaborate_drops::DropFlagState;
 use crate::framework::SwitchIntEdgeEffects;
 use crate::move_paths::{HasMoveData, InitIndex, InitKind, LookupResult, MoveData, MovePathIndex};
 use crate::on_lookup_result_bits;
+use crate::task_info::{Task, TaskInfo};
 use crate::MoveDataParamEnv;
 use crate::{drop_flag_effects, on_all_children_bits};
+use crate::{drop_flag_effects_for_location, JoinSemiLattice};
 use crate::{lattice, AnalysisDomain, GenKill, GenKillAnalysis, MaybeReachable};
+
+use super::syncable_tasks::{DefinitelySyncedTasks, MaybeSyncedTasks};
 
 /// `MaybeInitializedPlaces` tracks all places that might be
 /// initialized upon reaching a particular point in the control flow
@@ -53,11 +58,34 @@ pub struct MaybeInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
     skip_unreachable_unwind: bool,
+    /// Stores information about tasks: their last locations, the spindles they contain, and their
+    /// parent-child relationships, for example.
+    task_info: &'a TaskInfo,
+    /// Maps locations to the tasks which may be synced at a given location (must be a sync).
+    maybe_synced_tasks: &'a MaybeSyncedTasks,
+    /// Maps locations to the state of the dataflow analysis at that location. The locations in this
+    /// map are the last locations of tasks.
+    state_at_last_locations: FxHashMap<Location, MaybeReachable<ChunkedBitSet<MovePathIndex>>>,
 }
 
 impl<'a, 'tcx> MaybeInitializedPlaces<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        MaybeInitializedPlaces { tcx, body, mdpe, skip_unreachable_unwind: false }
+    #[instrument(level = "debug", name = "MaybeInitializedPlaces::new", skip_all)]
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        maybe_synced_tasks: &'a MaybeSyncedTasks,
+    ) -> Self {
+        MaybeInitializedPlaces {
+            tcx,
+            body,
+            mdpe,
+            skip_unreachable_unwind: false,
+            task_info,
+            maybe_synced_tasks,
+            state_at_last_locations: FxHashMap::default(),
+        }
     }
 
     pub fn skipping_unreachable_unwind(mut self) -> Self {
@@ -130,16 +158,32 @@ pub struct MaybeUninitializedPlaces<'a, 'tcx> {
 
     mark_inactive_variants_as_uninit: bool,
     skip_unreachable_unwind: BitSet<mir::BasicBlock>,
+
+    /// See [MaybeInitializedPlaces::task_info].
+    task_info: &'a TaskInfo,
+    definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    /// See [MaybeInitializedPlaces::state_at_last_locations].
+    state_at_last_locations: FxHashMap<Location, ChunkedBitSet<MovePathIndex>>,
 }
 
 impl<'a, 'tcx> MaybeUninitializedPlaces<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
+    #[instrument(level = "debug", name = "MaybeUninitializedPlaces::new", skip_all)]
+    pub fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    ) -> Self {
         MaybeUninitializedPlaces {
             tcx,
             body,
             mdpe,
             mark_inactive_variants_as_uninit: false,
             skip_unreachable_unwind: BitSet::new_empty(body.basic_blocks.len()),
+            task_info,
+            definitely_synced_tasks,
+            state_at_last_locations: FxHashMap::default(),
         }
     }
 
@@ -205,11 +249,25 @@ impl<'a, 'tcx> HasMoveData<'tcx> for MaybeUninitializedPlaces<'a, 'tcx> {
 pub struct DefinitelyInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
+    task_info: &'a TaskInfo,
+    definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    state_at_last_locations: FxHashMap<Location, lattice::Dual<BitSet<MovePathIndex>>>,
 }
 
 impl<'a, 'tcx> DefinitelyInitializedPlaces<'a, 'tcx> {
-    pub fn new(body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        DefinitelyInitializedPlaces { body, mdpe }
+    pub fn new(
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        definitely_synced_tasks: &'a DefinitelySyncedTasks,
+    ) -> Self {
+        DefinitelyInitializedPlaces {
+            body,
+            mdpe,
+            task_info,
+            definitely_synced_tasks,
+            state_at_last_locations: FxHashMap::default(),
+        }
     }
 }
 
@@ -251,11 +309,25 @@ impl<'a, 'tcx> HasMoveData<'tcx> for DefinitelyInitializedPlaces<'a, 'tcx> {
 pub struct EverInitializedPlaces<'a, 'tcx> {
     body: &'a Body<'tcx>,
     mdpe: &'a MoveDataParamEnv<'tcx>,
+    task_info: &'a TaskInfo,
+    maybe_synced_tasks: &'a MaybeSyncedTasks,
+    state_at_last_locations: FxHashMap<Location, ChunkedBitSet<InitIndex>>,
 }
 
 impl<'a, 'tcx> EverInitializedPlaces<'a, 'tcx> {
-    pub fn new(body: &'a Body<'tcx>, mdpe: &'a MoveDataParamEnv<'tcx>) -> Self {
-        EverInitializedPlaces { body, mdpe }
+    pub fn new(
+        body: &'a Body<'tcx>,
+        mdpe: &'a MoveDataParamEnv<'tcx>,
+        task_info: &'a TaskInfo,
+        maybe_synced_tasks: &'a MaybeSyncedTasks,
+    ) -> Self {
+        EverInitializedPlaces {
+            body,
+            mdpe,
+            task_info,
+            maybe_synced_tasks,
+            state_at_last_locations: FxHashMap::default(),
+        }
     }
 }
 
@@ -326,6 +398,24 @@ impl<'tcx> AnalysisDomain<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
     }
 }
 
+/// Find the last states of each task in `synced_tasks`.
+///
+/// Panics if any task in `synced_tasks` is not present in `task_info` or is the root task,
+/// as well as if any last location of a task in `synced_tasks` is not in `state_at_last_locations`.
+fn synced_task_last_states<'a, State>(
+    synced_tasks: impl Iterator<Item = Task> + 'a,
+    task_info: &'a TaskInfo,
+    state_at_last_locations: &'a FxHashMap<Location, State>,
+) -> impl Iterator<Item = &'a State> + 'a {
+    synced_tasks
+        .map(|task| task_info.expect_last_location(task))
+        // NOTE(jhilton): we originally expect the map to contain the last location,
+        // but in the case of a loop this isn't actually true. We expect instead
+        // that we'll eventually hit this sync again after changing one of its
+        // predecessors (although I'm not completely sure).
+        .filter_map(|last_location| state_at_last_locations.get(&last_location))
+}
+
 impl<'tcx> GenKillAnalysis<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
     type Idx = MovePathIndex;
 
@@ -374,6 +464,26 @@ impl<'tcx> GenKillAnalysis<'tcx> for MaybeInitializedPlaces<'_, 'tcx> {
         drop_flag_effects_for_location(self.body, self.mdpe, location, |path, s| {
             Self::update_bits(state, path, s)
         });
+
+        // This lets us track the state before a reattach, which is necessary when we sync.
+        if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
+            self.state_at_last_locations.insert(location, state.clone());
+        } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
+            // Grab the state at all last locations we could be syncing based on the current basic block.
+            let synced_tasks = self.maybe_synced_tasks.synced_tasks_at(&location);
+            synced_task_last_states(
+                synced_tasks.iter().copied(),
+                &self.task_info,
+                &self.state_at_last_locations,
+            )
+            .for_each(|state_at_last_location| {
+                // Bottom is uninitialized and top is initialized, and we want to become more initialized, so we go up.
+                // This makes sense because as we go 'up' in the lattice, we consider more of the state to be initialized.
+                // `join` provides least-upper-bound and we want the state to become "more initialized" upon a sync.
+                state.join(&state_at_last_location);
+            });
+        }
+
         edges
     }
 
@@ -493,6 +603,22 @@ impl<'tcx> GenKillAnalysis<'tcx> for MaybeUninitializedPlaces<'_, 'tcx> {
         drop_flag_effects_for_location(self.body, self.mdpe, location, |path, s| {
             Self::update_bits(trans, path, s)
         });
+        if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
+            self.state_at_last_locations.insert(location, trans.clone());
+        } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
+            let synced_tasks = self.definitely_synced_tasks.synced_tasks_at(&location);
+            synced_task_last_states(
+                synced_tasks.iter().copied(),
+                &self.task_info,
+                &self.state_at_last_locations,
+            )
+            .for_each(|state| {
+                use crate::lattice::MeetSemiLattice;
+                // Bottom is all-initialized and top is all-uninitialized, so we want to use meet to go lower in the lattice.
+                trans.meet(state);
+            });
+        }
+
         if self.skip_unreachable_unwind.contains(location.block) {
             let mir::TerminatorKind::Drop { target, unwind, .. } = terminator.kind else { bug!() };
             assert!(matches!(unwind, mir::UnwindAction::Cleanup(_)));
@@ -617,6 +743,26 @@ impl<'tcx> GenKillAnalysis<'tcx> for DefinitelyInitializedPlaces<'_, 'tcx> {
         drop_flag_effects_for_location(self.body, self.mdpe, location, |path, s| {
             Self::update_bits(trans, path, s)
         });
+
+        if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
+            self.state_at_last_locations.insert(location, trans.clone());
+        } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
+            let synced_tasks = self.definitely_synced_tasks.synced_tasks_at(&location);
+            // We want to say that a state is definitely initialized if it is definitely initialized in some synced child.
+            synced_task_last_states(
+                synced_tasks.iter().copied(),
+                &self.task_info,
+                &self.state_at_last_locations,
+            )
+            .for_each(|state| {
+                // We use meet here because we need the number of initialized variables to increase at a sync,
+                // and meet is union for `DefinitelyInitialized`. It also makes sense since we're going down in the
+                // lattice by using meet, which takes us closer to all variables being initialized.
+                use crate::framework::lattice::MeetSemiLattice;
+                trans.meet(&state);
+            });
+        }
+
         terminator.edges()
     }
 
@@ -714,6 +860,22 @@ impl<'tcx> GenKillAnalysis<'tcx> for EverInitializedPlaces<'_, 'tcx> {
                 })
                 .copied(),
         );
+        if let mir::TerminatorKind::Reattach { continuation: _ } = terminator.kind {
+            self.state_at_last_locations.insert(location, trans.clone());
+        } else if let mir::TerminatorKind::Sync { target: _ } = terminator.kind {
+            let synced_tasks = self.maybe_synced_tasks.synced_tasks_at(&location);
+            // A state is ever initialized if it is ever initialized in some synced child.
+            synced_task_last_states(
+                synced_tasks.iter().copied(),
+                &self.task_info,
+                &self.state_at_last_locations,
+            )
+            .for_each(|state| {
+                // This lattice has all-uninitialized as the bottom and the join operator adds
+                // initialized places, so we use join here.
+                trans.join(&state);
+            });
+        }
         terminator.edges()
     }
 

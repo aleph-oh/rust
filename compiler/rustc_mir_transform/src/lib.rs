@@ -51,6 +51,7 @@ mod abort_unwinding_calls;
 mod add_call_guards;
 mod add_moves_for_packed_drops;
 mod add_retag;
+mod automatic_sync_insertion;
 mod check_const_item_mutation;
 mod check_packed_ref;
 pub mod check_unsafety;
@@ -546,6 +547,9 @@ fn run_runtime_cleanup_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         &lower_intrinsics::LowerIntrinsics,
         &remove_place_mention::RemovePlaceMention,
         &simplify::SimplifyCfg::ElaborateDrops,
+        // NOTE(jhilton): this might not be the best place to insert syncs: we could also do it while lowering
+        // analysis to runtime MIR.
+        &automatic_sync_insertion::InsertSyncs,
     ];
 
     pm::run_passes(tcx, body, passes, Some(MirPhase::Runtime(RuntimePhase::PostCleanup)));

@@ -641,6 +641,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
                 kind: TerminatorKind::Return,
             }),
             is_cleanup: false,
+            is_parallel_loop_header: false,
         })
     }
 
@@ -900,6 +901,7 @@ fn promote_candidates<'tcx>(
             body.span,
             None,
             body.tainted_by_errors,
+            false,
         );
         promoted.phase = MirPhase::Analysis(AnalysisPhase::Initial);
 

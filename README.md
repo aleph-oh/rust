@@ -43,6 +43,16 @@ See https://www.rust-lang.org/community for a list of chat platforms and forums.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Required Environment Variables
+The compiler uses the environment variables *OPENCILK_ABI_PATH* and *OPENCILK_RT_SEARCH_DIR*. 
+Although bootstrapping the compiler does not require setting either of these above environment variables, 
+invoking its test suite with "./x test" will. After bootstrapping, running a command like find build -name "libopencilk*" 
+should give both the directory containing the OpenCilk runtime shared library and the path to the bitcode file (a filename which ends in .bc). 
+OPENCILK_ABI_PATH should be set to the path to the bitcode file, and 
+OPENCILK_RT_SEARCH_DIR should be set to the directory containing the runtime's shared library. 
+Exporting these variables in some file like .bashrc or .zshrc should make this requirement less tedious to accommodate 
+until some changes to make rustc search for the OpenCilk runtime shared library and the correct bitcode file are done.
+
 ## License
 
 Rust is primarily distributed under the terms of both the MIT license and the

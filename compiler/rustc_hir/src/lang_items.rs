@@ -342,6 +342,10 @@ language_item_table! {
 
     String,                  sym::String,              string,                     Target::Struct,         GenericRequirement::None;
     CStr,                    sym::CStr,                c_str,                      Target::Struct,         GenericRequirement::None;
+
+    // Some language items related to Tapir lowering. cilk_scope needs the ability to hint that the runtime should start and stop.
+    TapirRuntimeStart,      sym::tapir_runtime_start,  tapir_runtime_start,        Target::Fn,             GenericRequirement::None;
+    TapirRuntimeStop,       sym::tapir_runtime_stop,   tapir_runtime_stop,         Target::Fn,             GenericRequirement::None;
 }
 
 pub enum GenericRequirement {

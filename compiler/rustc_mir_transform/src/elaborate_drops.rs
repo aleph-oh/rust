@@ -6,10 +6,13 @@ use rustc_middle::mir::*;
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_mir_dataflow::elaborate_drops::{elaborate_drop, DropFlagState, Unwind};
 use rustc_mir_dataflow::elaborate_drops::{DropElaborator, DropFlagMode, DropStyle};
-use rustc_mir_dataflow::impls::{MaybeInitializedPlaces, MaybeUninitializedPlaces};
+use rustc_mir_dataflow::impls::{
+    definitely_synced_tasks, maybe_synced_tasks, MaybeInitializedPlaces, MaybeUninitializedPlaces,
+};
 use rustc_mir_dataflow::move_paths::{LookupResult, MoveData, MovePathIndex};
 use rustc_mir_dataflow::on_all_children_bits;
 use rustc_mir_dataflow::on_lookup_result_bits;
+use rustc_mir_dataflow::task_info::TaskInfo;
 use rustc_mir_dataflow::MoveDataParamEnv;
 use rustc_mir_dataflow::{Analysis, ResultsCursor};
 use rustc_span::Span;
@@ -60,21 +63,31 @@ impl<'tcx> MirPass<'tcx> for ElaborateDrops {
         let elaborate_patch = {
             let env = MoveDataParamEnv { move_data, param_env };
 
-            let mut inits = MaybeInitializedPlaces::new(tcx, body, &env)
-                .skipping_unreachable_unwind()
-                .into_engine(tcx, body)
-                .pass_name("elaborate_drops")
-                .iterate_to_fixpoint()
-                .into_results_cursor(body);
+            let task_info = TaskInfo::from_body(body);
+            let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+            let definitely_synced_tasks = definitely_synced_tasks(tcx, body, &task_info);
+            let mut inits =
+                MaybeInitializedPlaces::new(tcx, body, &env, &task_info, &maybe_synced_tasks)
+                    .skipping_unreachable_unwind()
+                    .into_engine(tcx, body)
+                    .pass_name("elaborate_drops")
+                    .iterate_to_fixpoint()
+                    .into_results_cursor(body);
             let dead_unwinds = compute_dead_unwinds(body, &mut inits);
 
-            let uninits = MaybeUninitializedPlaces::new(tcx, body, &env)
-                .mark_inactive_variants_as_uninit()
-                .skipping_unreachable_unwind(dead_unwinds)
-                .into_engine(tcx, body)
-                .pass_name("elaborate_drops")
-                .iterate_to_fixpoint()
-                .into_results_cursor(body);
+            let uninits = MaybeUninitializedPlaces::new(
+                tcx,
+                body,
+                &env,
+                &task_info,
+                &definitely_synced_tasks,
+            )
+            .mark_inactive_variants_as_uninit()
+            .skipping_unreachable_unwind(dead_unwinds)
+            .into_engine(tcx, body)
+            .pass_name("elaborate_drops")
+            .iterate_to_fixpoint()
+            .into_results_cursor(body);
 
             let drop_flags = IndexVec::from_elem(None, &env.move_data.move_paths);
             ElaborateDropsCtxt {

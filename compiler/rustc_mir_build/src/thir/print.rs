@@ -297,7 +297,7 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 self.print_expr(*source, depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl);
             }
-            Loop { body } => {
+            Loop { body, tapir_loop_spawn: _ } => {
                 print_indented!(self, "Loop (", depth_lvl);
                 print_indented!(self, "body:", depth_lvl + 1);
                 self.print_expr(*body, depth_lvl + 2);
@@ -542,6 +542,12 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, "CilkSpawn {", depth_lvl);
                 print_indented!(self, "computation:", depth_lvl + 1);
                 self.print_expr(*computation, depth_lvl + 2);
+                print_indented!(self, "}", depth_lvl);
+            }
+            CilkScope { block } => {
+                print_indented!(self, "CilkScope {", depth_lvl);
+                print_indented!(self, "block:", depth_lvl + 1);
+                self.print_block(*block, depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl);
             }
             CilkSync => {

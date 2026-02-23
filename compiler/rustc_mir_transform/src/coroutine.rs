@@ -303,6 +303,7 @@ impl<'tcx> TransformVisitor<'tcx> {
             statements,
             terminator: Some(Terminator { source_info, kind: TerminatorKind::Return }),
             is_cleanup: false,
+            is_parallel_loop_header: false,
         });
 
         block
@@ -1161,6 +1162,7 @@ fn insert_switch<'tcx>(
             statements: vec![assign],
             terminator: Some(Terminator { source_info, kind: switch }),
             is_cleanup: false,
+            is_parallel_loop_header: false,
         },
     );
 
@@ -1294,6 +1296,7 @@ fn insert_term_block<'tcx>(body: &mut Body<'tcx>, kind: TerminatorKind<'tcx>) ->
         statements: Vec::new(),
         terminator: Some(Terminator { source_info, kind }),
         is_cleanup: false,
+        is_parallel_loop_header: false,
     })
 }
 
@@ -1320,6 +1323,7 @@ fn insert_panic_block<'tcx>(
         statements: Vec::new(),
         terminator: Some(Terminator { source_info, kind: term }),
         is_cleanup: false,
+        is_parallel_loop_header: false,
     });
 
     assert_block
@@ -1401,6 +1405,7 @@ fn create_coroutine_resume_function<'tcx>(
             statements: vec![transform.set_discr(VariantIdx::new(POISONED), source_info)],
             terminator: Some(Terminator { source_info, kind: TerminatorKind::UnwindResume }),
             is_cleanup: true,
+            is_parallel_loop_header: false,
         });
 
         for (idx, block) in body.basic_blocks_mut().iter_enumerated_mut() {
@@ -1492,6 +1497,7 @@ fn insert_clean_drop(body: &mut Body<'_>) -> BasicBlock {
         statements: Vec::new(),
         terminator: Some(Terminator { source_info, kind: term }),
         is_cleanup: false,
+        is_parallel_loop_header: false,
     })
 }
 
@@ -1558,6 +1564,7 @@ fn create_cases<'tcx>(
                         kind: TerminatorKind::Goto { target },
                     }),
                     is_cleanup: false,
+                    is_parallel_loop_header: false,
                 });
 
                 (point.state, block)

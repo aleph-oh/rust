@@ -151,6 +151,11 @@ impl<I: Idx, T> IndexSlice<I, T> {
             Err(i) => Err(Idx::new(i)),
         }
     }
+
+    /// Returns [None] if this [IndexVec] is empty, otherwise Some((first, rest)).
+    pub fn split_first(&self) -> Option<(&T, &IndexSlice<I, T>)> {
+        self.raw.split_first().map(|(t, slice)| (t, IndexSlice::from_raw(slice)))
+    }
 }
 
 impl<I: Idx, J: Idx> IndexSlice<I, J> {

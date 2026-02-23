@@ -1298,6 +1298,7 @@ impl Expr {
             ExprKind::Become(..) => ExprPrecedence::Become,
             ExprKind::CilkSpawn(..) => ExprPrecedence::CilkSpawn,
             ExprKind::CilkSync => ExprPrecedence::CilkSync,
+            ExprKind::CilkScope(..) => ExprPrecedence::CilkScope,
             ExprKind::Err => ExprPrecedence::Err,
         }
     }
@@ -1457,6 +1458,9 @@ pub enum ExprKind {
     // FIXME(jhilton): we might be able to generalize this by making this accept a P<Expr> instead.
     CilkSpawn(P<Block>),
 
+    /// A cilk_scope block (`cilk_scope { ... }`).
+    CilkScope(P<Block>),
+
     /// An assignment (`a = foo()`).
     /// The `Span` argument is the span of the `=` token.
     Assign(P<Expr>, P<Expr>, Span),
@@ -1548,6 +1552,7 @@ pub enum ExprKind {
 pub enum ForLoopKind {
     For,
     ForAwait,
+    CilkFor,
 }
 
 /// Used to differentiate between `async {}` blocks and `gen {}` blocks.

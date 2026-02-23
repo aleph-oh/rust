@@ -201,13 +201,14 @@ fn resolve_arm<'tcx>(visitor: &mut RegionResolutionVisitor<'tcx>, arm: &'tcx hir
 }
 
 fn resolve_pat<'tcx>(visitor: &mut RegionResolutionVisitor<'tcx>, pat: &'tcx hir::Pat<'tcx>) {
+    debug!("resolve_pat for {:?}", pat.kind);
     visitor.record_child_scope(Scope { id: pat.hir_id.local_id, data: ScopeData::Node });
 
     // If this is a binding then record the lifetime of that binding.
-    if let PatKind::Binding(..) = pat.kind {
+    if let PatKind::Binding(_annot, id, ident, _opt) = pat.kind {
+        debug!("resolve PatKind::Binding for {} {}", ident, id);
         record_var_lifetime(visitor, pat.hir_id.local_id);
     }
-
     debug!("resolve_pat - pre-increment {} pat = {:?}", visitor.expr_and_pat_count, pat);
 
     intravisit::walk_pat(visitor, pat);

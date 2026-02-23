@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 //! ### Inferring borrow kinds for upvars
 //!
 //! Whenever there is a closure expression, we need to determine how each
@@ -150,6 +152,12 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
                 let body = self.fcx.tcx.hir().body(anon_const.body);
                 self.visit_body(body);
             }
+            hir::ExprKind::CilkSpawn(inner) => {
+                // let body = self.fcx.tcx.hir().body();
+                // self.visit_expr(expr);
+                // let expr_ref = &expr; 
+                self.fcx.analyze_cilk_spawn(expr.hir_id, expr.span, inner);
+            }
             _ => {}
         }
 
@@ -158,6 +166,74 @@ impl<'a, 'tcx> Visitor<'tcx> for InferBorrowKindVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
+    #[instrument(skip(self, inner), level = "debug")]
+    fn analyze_cilk_spawn(
+        &self,
+        cilk_spawn_hir_id: hir::HirId,
+        span: Span,
+        inner: &'tcx hir::CilkSpawn<'tcx>
+    ){
+        let ty = self.node_ty(inner.body.hir_id);
+
+        // println!("type of expression: {:?}", ty); // this still doesn't work, TODO(acai): either fix or remove
+
+        let cilk_spawn_local_def_id = inner.def_id;
+
+        let mut delegate = InferBorrowKind {
+            closure_def_id: cilk_spawn_local_def_id,
+            capture_information: Default::default(),
+            fake_reads: Default::default(),
+        };
+
+        euv::ExprUseVisitor::new(
+            &mut delegate,
+            &self.infcx,
+            cilk_spawn_local_def_id,
+            self.param_env,
+            &self.typeck_results.borrow(),
+        ).consume_expr(inner.body);
+
+        debug!(
+            "For closure={:?}, capture_information={:#?}",
+            cilk_spawn_local_def_id, delegate.capture_information
+        );
+
+        self.log_capture_analysis_first_pass(cilk_spawn_local_def_id, &delegate.capture_information, span);
+    
+        let (capture_information, closure_kind, origin) = self
+            .process_collected_capture_information(rustc_ast::CaptureBy::Ref, delegate.capture_information);
+
+        self.compute_min_captures(cilk_spawn_local_def_id, capture_information, span);
+
+        let sync_id = self.tcx.lang_items().sync_trait().unwrap();
+        let send_id = self.tcx.get_diagnostic_item(sym::Send).unwrap();
+
+        // get access to min_captures
+        let binding = self.typeck_results.borrow();
+        let min_captures = binding.closure_min_captures.get(&cilk_spawn_local_def_id); // TODO(acai): I'm not actually sure this does anything... make sure it's being used correctly
+
+        if let Some(upvars) = self.tcx.upvars_mentioned(cilk_spawn_local_def_id) {
+            for (&var_hir_id, .. ) in upvars.iter() {
+                let capture_type = (min_captures.unwrap().get(&var_hir_id).unwrap())[0].info.capture_kind;
+                // println!("capture_information={:#?}", &capture_type);
+                let ty = self.resolve_vars_if_possible(self.node_ty(var_hir_id));
+                let impl_sync = self.infcx.type_implements_trait(sync_id, [ty], self.param_env)
+                .must_apply_modulo_regions();
+                let impl_send = self.infcx.type_implements_trait(send_id, [ty], self.param_env)
+                .must_apply_modulo_regions();
+                // println!("impl Send: {}, impl Sync: {}", impl_send, impl_sync);
+                if let UpvarCapture::ByRef(kind) = capture_type{
+                    if !impl_sync{
+                        panic!("cilk_spawn capture does not implement Sync"); // TODO(acai): emit an error instead of panicking
+                    }
+                } else {
+                    if !impl_send{
+                        panic!("cilk_spawn capture does not implement Send"); // TODO(acai): emit an error instead of panicking
+                    }
+                }
+            }
+        };
+    }
     /// Analysis starting point.
     #[instrument(skip(self, body), level = "debug")]
     fn analyze_closure(
@@ -1076,6 +1152,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         let ty = self.resolve_vars_if_possible(self.node_ty(var_hir_id));
 
+        // TODO(acai): this logic actually seems useful, return to evaluate whether I need to include this
         let ty = match closure_clause {
             hir::CaptureBy::Value { .. } => ty, // For move closure the capture kind should be by value
             hir::CaptureBy::Ref => {
@@ -1266,7 +1343,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// Returns a tuple containing a vector of MigrationDiagnosticInfo, as well as a String
     /// containing the reason why root variables whose HirId is contained in the vector should
     /// be captured
-    #[instrument(level = "debug", skip(self))]
+    // #[instrument(level = "debug", skip(self))]
     fn compute_2229_migrations(
         &self,
         closure_def_id: LocalDefId,
@@ -1878,7 +1955,7 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
         ));
     }
 
-    #[instrument(skip(self), level = "debug")]
+    // #[instrument(skip(self), level = "debug")]
     fn borrow(
         &mut self,
         place_with_id: &PlaceWithHirId<'tcx>,
@@ -1890,18 +1967,15 @@ impl<'tcx> euv::Delegate<'tcx> for InferBorrowKind<'tcx> {
 
         // The region here will get discarded/ignored
         let capture_kind = ty::UpvarCapture::ByRef(bk);
-
         // We only want repr packed restriction to be applied to reading references into a packed
         // struct, and not when the data is being moved. Therefore we call this method here instead
         // of in `restrict_capture_precision`.
         let (place, mut capture_kind) =
             restrict_repr_packed_field_ref_capture(place_with_id.place.clone(), capture_kind);
-
         // Raw pointers don't inherit mutability
         if place_with_id.place.deref_tys().any(Ty::is_unsafe_ptr) {
             capture_kind = ty::UpvarCapture::ByRef(ty::BorrowKind::ImmBorrow);
         }
-
         self.capture_information.push((
             place,
             ty::CaptureInfo {

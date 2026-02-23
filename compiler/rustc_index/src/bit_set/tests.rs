@@ -438,6 +438,92 @@ fn chunked_bitset_iter() {
 }
 
 #[test]
+fn chunked_bitset_intersect_empty_empty() {
+    let vec: Vec<usize> = Vec::new();
+    let n = 10000;
+    let mut bit1 = with_elements_chunked(&vec, n);
+    let mut bit2 = with_elements_chunked(&vec, n);
+    assert!(!bit1.intersect(&bit2));
+    assert_eq!(bit1, bit2);
+    assert!(!bit2.intersect(&bit1));
+    assert_eq!(bit1, bit2);
+}
+
+#[test]
+fn chunked_bitset_intersect_empty_filled() {
+    let n = 10000;
+    let vec1: Vec<usize> = Vec::new();
+    let vec2: Vec<usize> = (0..n).collect();
+    let mut bit1 = with_elements_chunked(&vec1, n);
+    let mut bit2 = with_elements_chunked(&vec2, n);
+    let bit1_clone = bit1.clone();
+    assert!(!bit1.intersect(&bit2));
+    assert_eq!(bit1, bit1_clone);
+    assert!(bit2.intersect(&bit1));
+    assert_eq!(bit2, bit1);
+}
+
+#[test]
+fn chunked_bitset_intersect_empty_mixed() {
+    let n = 10000;
+    let vec1: Vec<usize> = Vec::new();
+    let vec2: Vec<usize> = vec![0, 1, 2, 2010, 2047, 2099, 6000, 6002, 6004];
+    let mut bit1 = with_elements_chunked(&vec1, n);
+    let mut bit2 = with_elements_chunked(&vec2, n);
+    let bit1_clone = bit1.clone();
+    assert!(!bit1.intersect(&bit2));
+    assert_eq!(bit1, bit1_clone);
+    assert!(bit2.intersect(&bit1));
+    assert_eq!(bit2, bit1);
+}
+
+#[test]
+fn chunked_bitset_intersect_filled_filled() {
+    let n = 10000;
+    let vec1: Vec<usize> = (0..n).collect();
+    let vec2: Vec<usize> = (0..n).collect();
+    let mut bit1 = with_elements_chunked(&vec1, n);
+    let mut bit2 = with_elements_chunked(&vec2, n);
+    let bit1_clone = bit1.clone();
+    assert!(!bit1.intersect(&bit2));
+    assert_eq!(bit1, bit1_clone);
+    assert!(!bit2.intersect(&bit1));
+    assert_eq!(bit2, bit1);
+}
+
+#[test]
+fn chunked_bitset_intersect_filled_mixed() {
+    let n = 10000;
+    let vec1: Vec<usize> = (0..n).collect();
+    let vec2: Vec<usize> = vec![0, 1, 2, 2010, 2047, 2099, 6000, 6002, 6004];
+    let vec_expected: Vec<usize> = vec![0, 1, 2, 2010, 2047, 2099, 6000, 6002, 6004];
+    let mut bit1 = with_elements_chunked(&vec1, n);
+    let mut bit2 = with_elements_chunked(&vec2, n);
+    let bit_expected = with_elements_chunked(&vec_expected, n);
+    let bit1_clone = bit1.clone();
+    assert!(bit1.intersect(&bit2));
+    assert_eq!(bit1, bit_expected);
+    assert!(!bit2.intersect(&bit1_clone));
+    assert_eq!(bit2, bit_expected);
+}
+
+#[test]
+fn chunked_bitset_intersect_mixed_mixed() {
+    let n = 10000;
+    let vec1: Vec<usize> = vec![0, 1, 2, 2010, 5, 10, 20];
+    let vec2: Vec<usize> = vec![0, 1, 2, 2010, 2047, 2099, 6000, 6002, 6004];
+    let vec_expected: Vec<usize> = vec![0, 1, 2, 2010];
+    let mut bit1 = with_elements_chunked(&vec1, n);
+    let mut bit2 = with_elements_chunked(&vec2, n);
+    let expected = with_elements_chunked(&vec_expected, n);
+    let bit1_clone = bit1.clone();
+    assert!(bit1.intersect(&bit2));
+    assert_eq!(bit1, expected);
+    assert!(bit2.intersect(&bit1_clone));
+    assert_eq!(bit2, expected);
+}
+
+#[test]
 fn grow() {
     let mut set: GrowableBitSet<usize> = GrowableBitSet::with_capacity(65);
     for index in 0..65 {

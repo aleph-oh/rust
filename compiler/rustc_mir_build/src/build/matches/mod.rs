@@ -553,6 +553,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         }
     }
 
+    fn should_inject_fake_read(&self, initializer_id: ExprId) -> bool {
+        // For spawns, we don't want to emit a FakeRead since the value will only be defined on sync.
+        // They're nested inside a Scope consistently, so we just unwrap the scope.
+        match self.thir[initializer_id] {
+            Expr { kind: ExprKind::Scope { value, .. }, .. } => {
+                !matches!(self.thir[value], Expr { kind: ExprKind::CilkSpawn { .. }, .. })
+            }
+            _ => true,
+        }
+    }
+
     pub(super) fn expr_into_pattern(
         &mut self,
         mut block: BasicBlock,
@@ -566,9 +577,11 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     self.storage_live_binding(block, var, irrefutable_pat.span, OutsideGuard, true);
                 unpack!(block = self.expr_into_dest(place, block, initializer_id));
 
-                // Inject a fake read, see comments on `FakeReadCause::ForLet`.
-                let source_info = self.source_info(irrefutable_pat.span);
-                self.cfg.push_fake_read(block, source_info, FakeReadCause::ForLet(None), place);
+                if self.should_inject_fake_read(initializer_id) {
+                    // Inject a fake read, see comments on `FakeReadCause::ForLet`.
+                    let source_info = self.source_info(irrefutable_pat.span);
+                    self.cfg.push_fake_read(block, source_info, FakeReadCause::ForLet(None), place);
+                }
 
                 self.schedule_drop_for_binding(var, irrefutable_pat.span, OutsideGuard);
                 block.unit()
@@ -597,10 +610,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     self.storage_live_binding(block, var, irrefutable_pat.span, OutsideGuard, true);
                 unpack!(block = self.expr_into_dest(place, block, initializer_id));
 
-                // Inject a fake read, see comments on `FakeReadCause::ForLet`.
-                let pattern_source_info = self.source_info(irrefutable_pat.span);
-                let cause_let = FakeReadCause::ForLet(None);
-                self.cfg.push_fake_read(block, pattern_source_info, cause_let, place);
+                if self.should_inject_fake_read(initializer_id) {
+                    // Inject a fake read, see comments on `FakeReadCause::ForLet`.
+                    let pattern_source_info = self.source_info(irrefutable_pat.span);
+                    let cause_let = FakeReadCause::ForLet(None);
+                    self.cfg.push_fake_read(block, pattern_source_info, cause_let, place);
+                }
 
                 let ty_source_info = self.source_info(annotation.span);
 

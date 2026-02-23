@@ -450,6 +450,7 @@ where
                     kind: TerminatorKind::Unreachable,
                 }),
                 is_cleanup: self.unwind.is_cleanup(),
+                is_parallel_loop_header: false,
             });
         }
 
@@ -617,6 +618,7 @@ where
                 },
             }),
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
         };
         let switch_block = self.elaborator.patch().new_block(switch_block);
         self.drop_flag_test_block(switch_block, succ, unwind)
@@ -667,6 +669,7 @@ where
                 source_info: self.source_info,
             }),
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
         };
 
         let destructor_block = self.elaborator.patch().new_block(result);
@@ -717,6 +720,7 @@ where
                 ),
             ],
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
             terminator: Some(Terminator {
                 source_info: self.source_info,
                 // this gets overwritten by drop elaboration.
@@ -731,6 +735,7 @@ where
                 Rvalue::BinaryOp(BinOp::Eq, Box::new((copy(Place::from(cur)), copy(len.into())))),
             )],
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
             terminator: Some(Terminator {
                 source_info: self.source_info,
                 kind: TerminatorKind::if_(move_(can_go), succ, drop_block),
@@ -837,6 +842,7 @@ where
                 self.assign(cur.into(), Rvalue::Use(zero)),
             ],
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
             terminator: Some(Terminator {
                 source_info: self.source_info,
                 kind: TerminatorKind::Goto { target: loop_block },
@@ -968,6 +974,7 @@ where
             statements: vec![],
             terminator: Some(Terminator { source_info: self.source_info, kind: k }),
             is_cleanup: unwind.is_cleanup(),
+            is_parallel_loop_header: false,
         })
     }
 

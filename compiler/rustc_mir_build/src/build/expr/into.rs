@@ -204,7 +204,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 this.cfg.goto(short_circuit, source_info, target);
                 target.unit()
             }
-            ExprKind::Loop { body } => {
+            ExprKind::Loop { body, tapir_loop_spawn } => {
                 // [block]
                 //    |
                 //   [loop_block] -> [body_block] -/eval. body/-> [body_block_end]
@@ -215,34 +215,68 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 // The false link is required to make sure borrowck considers unwinds through the
                 // body, even when the exact code in the body cannot unwind
 
-                let loop_block = this.cfg.start_new_block();
+                // loop_block is the header. It needs to be a parallel loop header if
+                // this is the header to a parallel loop.
+                let loop_block = if tapir_loop_spawn {
+                    this.cfg.start_new_parallel_loop_header()
+                } else {
+                    this.cfg.start_new_block()
+                };
 
                 // Start the loop.
                 this.cfg.goto(block, source_info, loop_block);
 
-                this.in_breakable_scope(Some(loop_block), destination, expr_span, move |this| {
-                    // conduct the test, if necessary
-                    let body_block = this.cfg.start_new_block();
+                let exit_block = this.in_breakable_scope(
+                    Some(loop_block),
+                    destination,
+                    expr_span,
+                    move |this| {
+                        // conduct the test, if necessary
+                        let body_block = this.cfg.start_new_block();
+                        this.cfg.terminate(
+                            loop_block,
+                            source_info,
+                            TerminatorKind::FalseUnwind {
+                                real_target: body_block,
+                                unwind: UnwindAction::Continue,
+                            },
+                        );
+                        this.diverge_from(loop_block);
+
+                        // The “return” value of the loop body must always be a unit. We therefore
+                        // introduce a unit temporary as the destination for the loop body.
+                        let tmp = this.get_unit_temp();
+                        // Execute the body, branching back to the test.
+                        let body_block_end = unpack!(this.expr_into_dest(tmp, body_block, body));
+                        this.cfg.goto(body_block_end, source_info, loop_block);
+
+                        // Loops are only exited by `break` expressions.
+                        None
+                    },
+                );
+
+                if tapir_loop_spawn {
+                    // NOTE(jhilton): when building HIR we spawn only when the yielded value is Some.
+                    // So we know that if the loop body itself had no breaks, we won't be breaking or continuing
+                    // from within the loop.
+
+                    // First, we need to grab the block the loop jumps to.
+                    unpack!(block = exit_block);
+                    let next_block = this.cfg.start_new_block();
+                    // Now, we need to end it with a sync. There's probably
+                    // a more efficient way of doing this where [in_breakable_scope] uses
+                    // a sync rather than a goto for exits, but LLVM should be
+                    // able to remove the extra jump.
                     this.cfg.terminate(
-                        loop_block,
+                        block,
                         source_info,
-                        TerminatorKind::FalseUnwind {
-                            real_target: body_block,
-                            unwind: UnwindAction::Continue,
-                        },
+                        TerminatorKind::Sync { target: next_block },
                     );
-                    this.diverge_from(loop_block);
-
-                    // The “return” value of the loop body must always be a unit. We therefore
-                    // introduce a unit temporary as the destination for the loop body.
-                    let tmp = this.get_unit_temp();
-                    // Execute the body, branching back to the test.
-                    let body_block_end = unpack!(this.expr_into_dest(tmp, body_block, body));
-                    this.cfg.goto(body_block_end, source_info, loop_block);
-
-                    // Loops are only exited by `break` expressions.
-                    None
-                })
+                    next_block.unit()
+                } else {
+                    // No need for a sync, just return the block.
+                    exit_block
+                }
             }
             ExprKind::Call { ty: _, fun, ref args, from_hir_call, fn_span } => {
                 let fun = unpack!(block = this.as_local_operand(block, fun));
@@ -583,6 +617,32 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 );
 
                 block = continuation;
+                block.unit()
+            }
+
+            ExprKind::CilkScope { block: ast_block } => {
+                // First, give a hint to start the runtime at the beginning of the scope.
+                let start_runtime_kind =
+                    StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStart));
+                let start_runtime = Statement { source_info, kind: start_runtime_kind };
+                this.cfg.push(block, start_runtime);
+
+                // Next, generate the code for the block and end it in a sync.
+                unpack!(block = this.ast_block(destination, block, ast_block, source_info));
+                let next_block = this.cfg.start_new_block();
+                this.cfg.terminate(block, source_info, TerminatorKind::Sync { target: next_block });
+
+                // Update the block cursor, since we should now only be modifying from the block that's reached by the
+                // sync.
+                block = next_block;
+
+                // Lastly, give a hint to stop the runtime at the end of the scope.
+                let end_runtime_kind =
+                    StatementKind::Intrinsic(Box::new(NonDivergingIntrinsic::TapirRuntimeStop));
+                let end_runtime = Statement { source_info, kind: end_runtime_kind };
+                this.cfg.push(block, end_runtime);
+
+                // Hand back the new cursor.
                 block.unit()
             }
 

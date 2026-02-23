@@ -1,0 +1,169 @@
+// MIR for `fn0` after built
+
+| User Type Annotations
+| 0: user_ty: Canonical { value: Ty(std::sync::atomic::AtomicU64), max_universe: U0, variables: [] }, span: $DIR/simple_cilk_for.rs:11:14: 11:23, inferred_ty: std::sync::atomic::AtomicU64
+| 1: user_ty: Canonical { value: Ty(std::sync::atomic::AtomicU64), max_universe: U0, variables: [] }, span: $DIR/simple_cilk_for.rs:11:14: 11:23, inferred_ty: std::sync::atomic::AtomicU64
+|
+fn fn0() -> () {
+    let mut _0: ();
+    let _1: std::sync::atomic::AtomicU64 as UserTypeProjection { base: UserType(0), projs: [] };
+    let mut _2: std::ops::Range<u64>;
+    let mut _3: std::ops::Range<u64>;
+    let mut _5: ();
+    let _6: ();
+    let mut _7: std::option::Option<u64>;
+    let mut _8: &mut std::ops::Range<u64>;
+    let mut _9: &mut std::ops::Range<u64>;
+    let mut _10: isize;
+    let mut _11: !;
+    let mut _13: ();
+    let _14: u64;
+    let mut _15: &std::sync::atomic::AtomicU64;
+    let mut _16: u64;
+    let mut _17: std::sync::atomic::Ordering;
+    scope 1 {
+        debug sum => _1;
+        let mut _4: std::ops::Range<u64>;
+        scope 2 {
+            debug iter => _4;
+            let _12: u64;
+            scope 3 {
+                debug i => _12;
+            }
+        }
+    }
+
+    bb0: {
+        StorageLive(_1);
+        _1 = AtomicU64::new(const 0_u64) -> [return: bb1, unwind: bb20];
+    }
+
+    bb1: {
+        FakeRead(ForLet(None), _1);
+        AscribeUserType(_1, o, UserTypeProjection { base: UserType(1), projs: [] });
+        StorageLive(_2);
+        StorageLive(_3);
+        _3 = std::ops::Range::<u64> { start: const 1_u64, end: const 10_u64 };
+        _2 = <std::ops::Range<u64> as IntoIterator>::into_iter(move _3) -> [return: bb2, unwind: bb20];
+    }
+
+    bb2: {
+        StorageDead(_3);
+        PlaceMention(_2);
+        StorageLive(_4);
+        _4 = move _2;
+        goto -> bb4;
+    }
+
+    bb3: {
+        FakeRead(ForMatchedPlace(None), _2);
+        unreachable;
+    }
+
+    bb4: {
+        falseUnwind -> [real: bb5, unwind: bb20];
+    }
+
+    bb5: {
+        StorageLive(_6);
+        StorageLive(_7);
+        StorageLive(_8);
+        StorageLive(_9);
+        _9 = &mut _4;
+        _8 = &mut (*_9);
+        _7 = <std::ops::Range<u64> as Iterator>::next(move _8) -> [return: bb6, unwind: bb20];
+    }
+
+    bb6: {
+        StorageDead(_8);
+        PlaceMention(_7);
+        _10 = discriminant(_7);
+        switchInt(move _10) -> [0: bb8, 1: bb9, otherwise: bb7];
+    }
+
+    bb7: {
+        FakeRead(ForMatchedPlace(None), _7);
+        unreachable;
+    }
+
+    bb8: {
+        falseEdge -> [real: bb10, imaginary: bb9];
+    }
+
+    bb9: {
+        StorageLive(_12);
+        _12 = ((_7 as Some).0: u64);
+        detach -> [spawned_task: bb13, continuation: bb14];
+    }
+
+    bb10: {
+        _0 = const ();
+        goto -> bb17;
+    }
+
+    bb11: {
+        unreachable;
+    }
+
+    bb12: {
+        goto -> bb16;
+    }
+
+    bb13: {
+        StorageLive(_13);
+        StorageLive(_14);
+        StorageLive(_15);
+        _15 = &_1;
+        StorageLive(_16);
+        _16 = _12;
+        StorageLive(_17);
+        _17 = Relaxed;
+        _14 = AtomicU64::fetch_add(move _15, move _16, move _17) -> [return: bb15, unwind: bb20];
+    }
+
+    bb14: {
+        StorageDead(_13);
+        StorageDead(_12);
+        goto -> bb16;
+    }
+
+    bb15: {
+        StorageDead(_17);
+        StorageDead(_16);
+        StorageDead(_15);
+        StorageDead(_14);
+        _13 = const ();
+        _6 = move _13;
+        reattach -> bb14;
+    }
+
+    bb16: {
+        StorageDead(_9);
+        StorageDead(_7);
+        StorageDead(_6);
+        _5 = const ();
+        goto -> bb4;
+    }
+
+    bb17: {
+        StorageDead(_9);
+        StorageDead(_7);
+        StorageDead(_6);
+        sync -> bb18;
+    }
+
+    bb18: {
+        StorageDead(_4);
+        goto -> bb19;
+    }
+
+    bb19: {
+        StorageDead(_2);
+        StorageDead(_1);
+        return;
+    }
+
+    bb20 (cleanup): {
+        resume;
+    }
+}

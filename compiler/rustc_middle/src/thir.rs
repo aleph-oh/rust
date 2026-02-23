@@ -337,6 +337,9 @@ pub enum ExprKind<'tcx> {
     /// A `loop` expression.
     Loop {
         body: ExprId,
+        /// Whether to use the Tapir loop spawning strategy for this loop. Only true
+        /// when this loop originated from a `cilk_for`.
+        tapir_loop_spawn: bool,
     },
     Let {
         expr: ExprId,
@@ -499,9 +502,9 @@ pub enum ExprKind<'tcx> {
     CilkSpawn {
         computation: ExprId,
     },
-    // FIXME(jhilton): does the type of CilkSync make sense here? Where does automatic sync insertion belong?
-    //  We might have enough info to do it in HIR but most desugaring happens in MIR and we have more dataflow
-    //  info there anyways.
+    CilkScope {
+        block: BlockId,
+    },
     CilkSync,
 }
 

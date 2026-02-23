@@ -14,25 +14,43 @@ pub fn provide(providers: &mut Providers) {
         if !tcx.is_closure_like(def_id) {
             return None;
         }
-
         let local_def_id = def_id.expect_local();
-        let body = tcx.hir().body(tcx.hir().maybe_body_owned_by(local_def_id)?);
+        if let Some(body_id) = tcx.hir().maybe_body_owned_by(local_def_id.clone()) {
+            let body = tcx.hir().body(body_id);
+            let mut local_collector = LocalCollector::default();
+            local_collector.visit_body(body);
+            let mut capture_collector = CaptureCollector {
+                tcx,
+                locals: &local_collector.locals,
+                upvars: FxIndexMap::default(),
+            };
+            capture_collector.visit_body(body);
 
-        let mut local_collector = LocalCollector::default();
-        local_collector.visit_body(body);
+            if !capture_collector.upvars.is_empty() {
+                Some(tcx.arena.alloc(capture_collector.upvars))
+            } else {
+                None
+            }
+        } else if let Some(cilk_spawn_expr) = tcx.hir().maybe_cilk_spawn_owned_by(local_def_id.clone()) {
+            let mut local_collector = LocalCollector::default();
+            local_collector.visit_expr(cilk_spawn_expr);
+            let mut capture_collector = CaptureCollector {
+                tcx,
+                locals: &local_collector.locals,
+                upvars: FxIndexMap::default(),
+            };
+            capture_collector.visit_expr(cilk_spawn_expr);
 
-        let mut capture_collector = CaptureCollector {
-            tcx,
-            locals: &local_collector.locals,
-            upvars: FxIndexMap::default(),
-        };
-        capture_collector.visit_body(body);
-
-        if !capture_collector.upvars.is_empty() {
-            Some(tcx.arena.alloc(capture_collector.upvars))
+            if !capture_collector.upvars.is_empty() {
+                Some(tcx.arena.alloc(capture_collector.upvars))
+            } else {
+                None
+            }
         } else {
             None
         }
+        
+        
     };
 }
 

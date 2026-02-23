@@ -14,6 +14,8 @@ ty_utils_borrow_not_supported = borrowing is not supported in generic constants
 
 ty_utils_box_not_supported = allocations are not allowed in generic constants
 
+ty_utils_cilk_scope_not_supported = cilk_scope is not supported in generic constants
+
 ty_utils_cilk_spawn_not_supported = cilk_spawn is not supported in generic constants
 
 ty_utils_cilk_sync_not_supported = cilk_sync is not supported in generic constants

@@ -532,12 +532,34 @@ extern "C" void LLVMRustDisposeTargetMachine(LLVMTargetMachineRef TM) {
   delete unwrap(TM);
 }
 
+// Read the environment variable OPENCILK_ABI_PATH to get the path to the OpenCilk ABI for
+// this target.
+// FIXME(jhilton): we should detect this for the given architecture
+// and search in specified directories instead.
+StringRef FindOpenCilkABIBitCodeFilePath()
+{
+  const char *ABIPath = getenv("OPENCILK_ABI_PATH");
+  if (!ABIPath)
+  {
+    report_fatal_error("OPENCILK_ABI_PATH environment variable not set");
+  }
+  return ABIPath;
+}
+
+void addTapirOptions(TargetLibraryInfoImpl &TLII)
+{
+  TLII.setTapirTarget(TapirTargetID::OpenCilk);
+  TLII.setTapirTargetOptions(std::make_unique<OpenCilkABIOptions>(
+      FindOpenCilkABIBitCodeFilePath()));
+}
+
 // Unfortunately, the LLVM C API doesn't provide a way to create the
 // TargetLibraryInfo pass, so we use this method to do so.
 extern "C" void LLVMRustAddLibraryInfo(LLVMPassManagerRef PMR, LLVMModuleRef M,
                                        bool DisableSimplifyLibCalls) {
   Triple TargetTriple(unwrap(M)->getTargetTriple());
   TargetLibraryInfoImpl TLII(TargetTriple);
+  addTapirOptions(TLII);
   if (DisableSimplifyLibCalls)
     TLII.disableAllFunctions();
   unwrap(PMR)->add(new TargetLibraryInfoWrapperPass(TLII));
@@ -818,6 +840,7 @@ LLVMRustOptimize(
 
   Triple TargetTriple(TheModule->getTargetTriple());
   std::unique_ptr<TargetLibraryInfoImpl> TLII(new TargetLibraryInfoImpl(TargetTriple));
+  addTapirOptions(*TLII);
   if (DisableSimplifyLibCalls)
     TLII->disableAllFunctions();
   FAM.registerPass([&] { return TargetLibraryAnalysis(*TLII); });
@@ -934,6 +957,7 @@ LLVMRustOptimize(
 
   ModulePassManager MPM;
   bool NeedThinLTOBufferPasses = UseThinLTOBuffers;
+  bool const LowerTapir = TLII->hasTapirTarget();
   if (!NoPrepopulatePasses) {
     // The pre-link pipelines don't support O0 and require using buildO0DefaultPipeline() instead.
     // At the same time, the LTO pipelines do support O0 and using them is required.
@@ -945,7 +969,7 @@ LLVMRustOptimize(
         PB.registerOptimizerLastEPCallback(C);
 
       // Pass false as we manually schedule ThinLTOBufferPasses below.
-      MPM = PB.buildO0DefaultPipeline(OptLevel, /* PreLinkLTO */ false);
+      MPM = PB.buildO0DefaultPipeline(OptLevel, /* PreLinkLTO */ false, LowerTapir);
     } else {
       for (const auto &C : PipelineStartEPCallbacks)
         PB.registerPipelineStartEPCallback(C);
@@ -954,7 +978,7 @@ LLVMRustOptimize(
 
       switch (OptStage) {
       case LLVMRustOptStage::PreLinkNoLTO:
-        MPM = PB.buildPerModuleDefaultPipeline(OptLevel, DebugPassManager);
+        MPM = PB.buildPerModuleDefaultPipeline(OptLevel, DebugPassManager, LowerTapir);
         break;
       case LLVMRustOptStage::PreLinkThinLTO:
         MPM = PB.buildThinLTOPreLinkDefaultPipeline(OptLevel);
@@ -967,10 +991,10 @@ LLVMRustOptimize(
       case LLVMRustOptStage::ThinLTO:
         // FIXME: Does it make sense to pass the ModuleSummaryIndex?
         // It only seems to be needed for C++ specific optimizations.
-        MPM = PB.buildThinLTODefaultPipeline(OptLevel, nullptr);
+        MPM = PB.buildThinLTODefaultPipeline(OptLevel, nullptr, LowerTapir);
         break;
       case LLVMRustOptStage::FatLTO:
-        MPM = PB.buildLTODefaultPipeline(OptLevel, nullptr);
+        MPM = PB.buildLTODefaultPipeline(OptLevel, nullptr, LowerTapir);
         break;
       }
     }

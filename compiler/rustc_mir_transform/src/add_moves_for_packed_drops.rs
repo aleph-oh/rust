@@ -91,6 +91,7 @@ fn add_move_for_packed_drop<'tcx>(
         statements: vec![Statement { source_info, kind: StatementKind::StorageDead(temp) }],
         terminator: Some(Terminator { source_info, kind: TerminatorKind::Goto { target } }),
         is_cleanup,
+        is_parallel_loop_header: false,
     });
 
     patch.add_statement(loc, StatementKind::StorageLive(temp));

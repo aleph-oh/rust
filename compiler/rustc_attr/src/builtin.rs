@@ -42,6 +42,12 @@ pub enum InlineAttr {
     Never,
 }
 
+#[derive(Copy, Clone, PartialEq, Encodable, Decodable, Debug, HashStable_Generic)]
+pub enum OrphaningAttr {
+    None,
+    Hint,
+}
+
 #[derive(Clone, Encodable, Decodable, Debug, PartialEq, Eq, HashStable_Generic)]
 pub enum InstructionSetAttr {
     ArmA32,

@@ -2,8 +2,9 @@ use rustc_index::bit_set::ChunkedBitSet;
 use rustc_middle::mir::{Body, TerminatorKind};
 use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{self, ParamEnv, Ty, TyCtxt, VariantDef};
-use rustc_mir_dataflow::impls::MaybeInitializedPlaces;
+use rustc_mir_dataflow::impls::{maybe_synced_tasks, MaybeInitializedPlaces};
 use rustc_mir_dataflow::move_paths::{LookupResult, MoveData, MovePathIndex};
+use rustc_mir_dataflow::task_info::TaskInfo;
 use rustc_mir_dataflow::{move_path_children_matching, Analysis, MaybeReachable, MoveDataParamEnv};
 use rustc_target::abi::FieldIdx;
 
@@ -26,11 +27,14 @@ impl<'tcx> MirPass<'tcx> for RemoveUninitDrops {
             MoveData::gather_moves(body, tcx, param_env, |ty| ty.needs_drop(tcx, param_env));
 
         let mdpe = MoveDataParamEnv { move_data, param_env };
-        let mut maybe_inits = MaybeInitializedPlaces::new(tcx, body, &mdpe)
-            .into_engine(tcx, body)
-            .pass_name("remove_uninit_drops")
-            .iterate_to_fixpoint()
-            .into_results_cursor(body);
+        let task_info = TaskInfo::from_body(body);
+        let maybe_synced_tasks = maybe_synced_tasks(tcx, body, &task_info);
+        let mut maybe_inits =
+            MaybeInitializedPlaces::new(tcx, body, &mdpe, &task_info, &maybe_synced_tasks)
+                .into_engine(tcx, body)
+                .pass_name("remove_uninit_drops")
+                .iterate_to_fixpoint()
+                .into_results_cursor(body);
 
         let mut to_remove = vec![];
         for (bb, block) in body.basic_blocks.iter_enumerated() {

@@ -8,7 +8,6 @@ use crate::common::{self, IntPredicate};
 use crate::meth;
 use crate::traits::*;
 use crate::MemFlags;
-
 use rustc_ast as ast;
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
 use rustc_hir::lang_items::LangItem;
@@ -21,7 +20,6 @@ use rustc_span::{source_map::Spanned, sym, Span, Symbol};
 use rustc_target::abi::call::{ArgAbi, FnAbi, PassMode, Reg};
 use rustc_target::abi::{self, HasDataLayout, WrappingRange};
 use rustc_target::spec::abi::Abi;
-
 use std::cmp;
 
 // Indicates if we are in the middle of merging a BB's successor into it. This
@@ -29,6 +27,11 @@ use std::cmp;
 // other predecessors.
 #[derive(Debug, PartialEq)]
 enum MergingSucc {
+    False,
+    True,
+}
+
+enum AddParallelLoopMetadata {
     False,
     True,
 }
@@ -125,6 +128,24 @@ impl<'a, 'tcx> TerminatorCodegenHelper<'tcx> {
         target: mir::BasicBlock,
         mergeable_succ: bool,
     ) -> MergingSucc {
+        self.funclet_br_maybe_add_metadata(
+            fx,
+            bx,
+            target,
+            mergeable_succ,
+            AddParallelLoopMetadata::False,
+        )
+    }
+
+    // could be useful for CAIATHEN(TASK3)
+    fn funclet_br_maybe_add_metadata<Bx: BuilderMethods<'a, 'tcx>>(
+        &self,
+        fx: &mut FunctionCx<'a, 'tcx, Bx>,
+        bx: &mut Bx,
+        target: mir::BasicBlock,
+        mergeable_succ: bool,
+        add_parallel_loop_metadata: AddParallelLoopMetadata,
+    ) -> MergingSucc {
         let (needs_landing_pad, is_cleanupret) = self.llbb_characteristics(fx, target);
         if mergeable_succ && !needs_landing_pad && !is_cleanupret {
             // We can merge the successor into this bb, so no need for a `br`.
@@ -139,7 +160,10 @@ impl<'a, 'tcx> TerminatorCodegenHelper<'tcx> {
                 // to a trampoline.
                 bx.cleanup_ret(self.funclet(fx).unwrap(), Some(lltarget));
             } else {
-                bx.br(lltarget);
+                let inst = bx.br(lltarget);
+                if matches!(add_parallel_loop_metadata, AddParallelLoopMetadata::True) {
+                    bx.tapir_loop_spawn_strategy_metadata(inst);
+                }
             }
             MergingSucc::False
         }
@@ -1131,6 +1155,16 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mergeable_succ,
         )
     }
+
+    fn sync_region(&mut self) -> &Bx::Value {
+        self.try_sync_region().unwrap_or_else(|| {
+            bug!("expected to have sync region!");
+        })
+    }
+
+    fn try_sync_region(&mut self) -> Option<&Bx::Value> {
+        self.sync_region_stack.last()
+    }
 }
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
@@ -1142,6 +1176,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         let bx = &mut Bx::build(self.cx, llbb);
         let mir = self.mir;
 
+
         // MIR basic blocks stop at any function call. This may not be the case
         // for the backend's basic blocks, in which case we might be able to
         // combine multiple MIR basic blocks into a single backend basic block.
@@ -1149,6 +1184,12 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             let data = &mir[bb];
 
             debug!("codegen_block({:?}={:?})", bb, data);
+
+            // LLVM InlineFunction should replace sync region of the orphaning function with the parent sync region 
+            if self.parallel_back_edges.contains(bb) {
+                println!("self.parallel_back_edges.contains(bb)");
+                bx.orphaning_syncregion(*self.sync_region(), &llbb);
+            }
 
             for statement in &data.statements {
                 self.codegen_statement(bx, statement);
@@ -1214,7 +1255,24 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             }
 
             mir::TerminatorKind::Goto { target } => {
-                helper.funclet_br(self, bx, target, mergeable_succ())
+                let add_tapir_metadata = if self.parallel_back_edges.contains(bb) {
+                    AddParallelLoopMetadata::True
+                } else {
+                    AddParallelLoopMetadata::False
+                };
+                // NOTE(jhilton): we attach the metadata to the parallel loop back edge.
+                // This is because in the structure of a loop, the back edge is more
+                // fundamental than the header and because the way LLVM detects loop metadata
+                // is by canonicalizing then checking the back edge. By adding the metadata to
+                // the back edge, we don't rely on the canonicalization succeeding, so it's a
+                // little less fragile (although I expect the canonicalization is very robust).
+                helper.funclet_br_maybe_add_metadata(
+                    self,
+                    bx,
+                    target,
+                    mergeable_succ(),
+                    add_tapir_metadata,
+                )
             }
 
             mir::TerminatorKind::SwitchInt { ref discr, ref targets } => {
@@ -1297,20 +1355,38 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 mergeable_succ(),
             ),
 
-            // FIXME(jhilton): all this codegen is just to no-ops. Change this later :)
-            mir::TerminatorKind::Detach { spawned_task, continuation: _ } => {
-                let target = self.llbb(spawned_task);
-                bx.br(target);
+            // FIXME(jhilton): for backends that don't support Tapir, we can merge successors.
+            // I can't use fn codegen_statement to generate taskframe create and use because they are not in the MIR (should I put them in the MIR?)
+            mir::TerminatorKind::Detach { spawned_task, continuation } => {
+                let spawned_task = self.llbb(spawned_task);
+                if Bx::supports_tapir() {
+                    let continuation = self.llbb(continuation);
+
+                    // ================= TERMINATOR =================
+                    bx.detach(spawned_task, continuation, *self.sync_region());
+                    self.sync_region_stack.push(bx.sync_region_start_bb(&spawned_task));
+                } else {
+                    bx.br(spawned_task);
+                }
                 MergingSucc::False
             }
             mir::TerminatorKind::Reattach { continuation } => {
-                let target = self.llbb(continuation);
-                bx.br(target);
+                let continuation = self.llbb(continuation);
+                if Bx::supports_tapir() {
+                    self.sync_region_stack.pop();
+                    bx.reattach(continuation, *self.sync_region());
+                } else {
+                    bx.br(continuation);
+                }
                 MergingSucc::False
             }
             mir::TerminatorKind::Sync { target } => {
                 let target = self.llbb(target);
-                bx.br(target);
+                if Bx::supports_tapir() {
+                    bx.sync(target, *self.sync_region());
+                } else {
+                    bx.br(target);
+                }
                 MergingSucc::False
             }
         }

@@ -360,7 +360,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.check_expr_index(base, idx, expr, brackets_span)
             }
             ExprKind::Yield(value, _) => self.check_expr_yield(value, expr),
-            ExprKind::CilkSpawn(expr) => self.check_expr(expr),
+            ExprKind::CilkSpawn(inner) => self.check_expr(inner.body),
+            ExprKind::CilkScope(block) => self.check_block_with_expected(block, expected),
             ExprKind::CilkSync => Ty::new_unit(tcx),
             hir::ExprKind::Err(guar) => Ty::new_error(tcx, guar),
         }
@@ -1295,6 +1296,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         expected: Expectation<'tcx>,
         expr: &'tcx hir::Expr<'tcx>,
     ) -> Ty<'tcx> {
+        // FIXME(jhilton): might be a good place to enforce the semantic rules for a cilk_for.
+        // Not sure how to implement `continue` here, disallowing is the conservative option.
         let coerce = match source {
             // you can only use break with a value from a normal `loop { }`
             hir::LoopSource::Loop => {
@@ -1302,7 +1305,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 Some(CoerceMany::new(coerce_to))
             }
 
-            hir::LoopSource::While | hir::LoopSource::ForLoop => None,
+            hir::LoopSource::While | hir::LoopSource::ForLoop | hir::LoopSource::CilkFor => None,
         };
 
         let ctxt = BreakableCtxt {

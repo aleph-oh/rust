@@ -278,6 +278,8 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind) {
     return Attribute::SafeStack;
   case FnRetThunkExtern:
     return Attribute::FnRetThunkExtern;
+  case Orphaning:
+    return Attribute::Orphaning;
   }
   report_fatal_error("bad AttributeKind");
 }
@@ -762,6 +764,20 @@ extern "C" bool LLVMRustHasModuleFlag(LLVMModuleRef M, const char *Name,
 extern "C" void LLVMRustGlobalAddMetadata(
     LLVMValueRef Global, unsigned Kind, LLVMMetadataRef MD) {
   unwrap<GlobalObject>(Global)->addMetadata(Kind, *unwrap<MDNode>(MD));
+}
+
+extern "C" LLVMMetadataRef LLVMRustMDGetTemporary(LLVMContextRef C) {
+    return wrap(llvm::MDNode::getTemporary(*unwrap(C), std::nullopt).release());
+}
+
+extern "C" void LLVMRustMDDeleteTemporary(LLVMMetadataRef MD) {
+    llvm::MDNode::deleteTemporary(unwrap<MDNode>(MD));
+}
+
+extern "C" void LLVMRustReplaceMDOperandWith(
+    LLVMMetadataRef MD, size_t Index, LLVMMetadataRef New
+) {
+    unwrap<MDNode>(MD)->replaceOperandWith(Index, unwrap<Metadata>(New));
 }
 
 extern "C" LLVMRustDIBuilderRef LLVMRustDIBuilderCreate(LLVMModuleRef M) {

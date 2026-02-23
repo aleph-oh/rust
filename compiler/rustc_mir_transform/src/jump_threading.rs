@@ -222,6 +222,18 @@ impl<'tcx, 'a> TOFinder<'tcx, 'a> {
             return;
         }
 
+        // If a predecessor of this block is a detach, skip the optimization.
+        let is_continuation_of_detach =
+            self.body.basic_blocks.predecessors()[bb].iter().any(|&pred| {
+                match self.body.basic_blocks[pred].terminator().kind {
+                    TerminatorKind::Detach { spawned_task: _, continuation } => continuation == bb,
+                    _ => false,
+                }
+            });
+        if is_continuation_of_detach {
+            return;
+        }
+
         debug!(cost = ?cost.cost());
         for (statement_index, stmt) in
             self.body.basic_blocks[bb].statements.iter().enumerate().rev()
@@ -326,6 +338,11 @@ impl<'tcx, 'a> TOFinder<'tcx, 'a> {
             | StatementKind::Intrinsic(box NonDivergingIntrinsic::Assume(..))
             // copy_nonoverlapping takes pointers and mutated the pointed-to value.
             | StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(..))
+            // Both of these intrinsics store no places.
+            | StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStart)
+            | StatementKind::Intrinsic(box NonDivergingIntrinsic::TapirRuntimeStop)
+            | StatementKind::Intrinsic(box NonDivergingIntrinsic::TaskframeCreate)
+            | StatementKind::Intrinsic(box NonDivergingIntrinsic::TaskframeUse)
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
             | StatementKind::FakeRead(..)

@@ -3,6 +3,7 @@
 #![feature(exact_size_is_empty)]
 #![feature(let_chains)]
 #![cfg_attr(bootstrap, feature(min_specialization))]
+#![feature(trait_alias)]
 #![feature(try_blocks)]
 
 #[macro_use]
@@ -35,6 +36,7 @@ pub mod move_paths;
 pub mod points;
 pub mod rustc_peek;
 pub mod storage;
+pub mod task_info;
 pub mod un_derefer;
 pub mod value_analysis;
 

@@ -36,4 +36,11 @@ pub trait IntrinsicCallMethods<'tcx>: BackendTypes {
     /// Trait method used to inject `va_end` on the "spoofed" `VaListImpl` before
     /// Rust defined C-variadic functions return.
     fn va_end(&mut self, val: Self::Value) -> Self::Value;
+    fn sync_region_start(&mut self) -> Self::Value;
+    fn sync_region_start_bb(&mut self, bb: &Self::BasicBlock) -> Self::Value;
+    fn tapir_runtime_start(&mut self) -> Self::Value;
+    fn tapir_runtime_end(&mut self, token: Self::Value);
+    fn orphaning_syncregion(&mut self, token: Self::Value, bb: &Self::BasicBlock);
+    // fn taskframe_create(&mut self) -> Self::Value;
+    // fn taskframe_use(&mut self, token: Self::Value);
 }

@@ -1,0 +1,32 @@
+thread 'rustc' panicked at compiler/rustc_errors/src/lib.rs:571:17:
+must_produce_diag: trimmed_def_paths called but no diagnostics emitted; use `DelayDm` for lints or `with_no_trimmed_paths` for debugging
+stack backtrace:
+   0:     0x7fd88041ceae - std::backtrace::Backtrace::create::hbf08f8e9c22c7f87
+   1:     0x7fd88041ce00 - std::backtrace::Backtrace::force_capture::h24dec70bd05fd392
+   2:     0x7fd881612b39 - <alloc[48f7803753b9f3d8]::boxed::Box<rustc_driver_impl[71c92a323737b8f2]::install_ice_hook::{closure#0}> as core[5f2b26ed1bffacb8]::ops::function::Fn<(&dyn for<'a, 'b> core[5f2b26ed1bffacb8]::ops::function::Fn<(&'a core[5f2b26ed1bffacb8]::panic::panic_info::PanicInfo<'b>,), Output = ()> + core[5f2b26ed1bffacb8]::marker::Send + core[5f2b26ed1bffacb8]::marker::Sync, &core[5f2b26ed1bffacb8]::panic::panic_info::PanicInfo)>>::call
+   3:     0x7fd88042054a - std::panicking::rust_panic_with_hook::h39dc39db82fa4c03
+   4:     0x7fd8803de736 - std::panicking::begin_panic_handler::{{closure}}::h3e417abcf1f65913
+   5:     0x7fd8803de6a6 - std::sys_common::backtrace::__rust_end_short_backtrace::hd7b8e345cf2ab53d
+   6:     0x7fd880420136 - rust_begin_unwind
+   7:     0x7fd8803beff5 - core::panicking::panic_fmt::h7b564df8ed0f330f
+   8:     0x7fd8880438b1 - <rustc_errors[e1a3a63dd1a7a9ac]::DiagCtxtInner as core[5f2b26ed1bffacb8]::ops::drop::Drop>::drop
+   9:     0x7fd881661680 - core[5f2b26ed1bffacb8]::ptr::drop_in_place::<rustc_errors[e1a3a63dd1a7a9ac]::DiagCtxt>
+  10:     0x7fd88166f478 - core[5f2b26ed1bffacb8]::ptr::drop_in_place::<rustc_session[eac94dcb9d868be3]::parse::ParseSess>
+  11:     0x7fd881668637 - core[5f2b26ed1bffacb8]::ptr::drop_in_place::<rustc_interface[be711f48536e4813]::interface::Compiler>
+  12:     0x7fd88162645e - rustc_span[dba191487bdc15d3]::set_source_map::<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}::{closure#0}>
+  13:     0x7fd88168d1c9 - <scoped_tls[cf541aff2279a93e]::ScopedKey<rustc_span[dba191487bdc15d3]::SessionGlobals>>::set::<rustc_interface[be711f48536e4813]::util::run_in_thread_pool_with_globals<rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>
+  14:     0x7fd8816269dc - rustc_span[dba191487bdc15d3]::create_session_globals_then::<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_interface[be711f48536e4813]::util::run_in_thread_pool_with_globals<rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}>
+  15:     0x7fd881625bde - std[f895a6f01c05d24b]::sys_common::backtrace::__rust_begin_short_backtrace::<rustc_interface[be711f48536e4813]::util::run_in_thread_with_globals<rustc_interface[be711f48536e4813]::util::run_in_thread_pool_with_globals<rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>
+  16:     0x7fd881615a04 - std[f895a6f01c05d24b]::panicking::try::<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, core[5f2b26ed1bffacb8]::panic::unwind_safe::AssertUnwindSafe<<std[f895a6f01c05d24b]::thread::Builder>::spawn_unchecked_<rustc_interface[be711f48536e4813]::util::run_in_thread_with_globals<rustc_interface[be711f48536e4813]::util::run_in_thread_pool_with_globals<rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#1}::{closure#0}>>
+  17:     0x7fd88162268a - <<std[f895a6f01c05d24b]::thread::Builder>::spawn_unchecked_<rustc_interface[be711f48536e4813]::util::run_in_thread_with_globals<rustc_interface[be711f48536e4813]::util::run_in_thread_pool_with_globals<rustc_interface[be711f48536e4813]::interface::run_compiler<core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>, rustc_driver_impl[71c92a323737b8f2]::run_compiler::{closure#0}>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#0}::{closure#0}, core[5f2b26ed1bffacb8]::result::Result<(), rustc_span[dba191487bdc15d3]::ErrorGuaranteed>>::{closure#1} as core[5f2b26ed1bffacb8]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+  18:     0x7fd8804094ea - <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once::hc4accfdf964b4745
+  19:     0x7fd8803e5c6d - std::sys::pal::unix::thread::Thread::new::thread_start::h551019578f263126
+  20:     0x7fd8801c8ac3 - start_thread
+                               at ./nptl/pthread_create.c:442:8
+  21:     0x7fd88025a850 - __GI___clone3
+                               at ./misc/../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+  22:                0x0 - <unknown>
+
+
+rustc version: 1.78.0-dev
+platform: x86_64-unknown-linux-gnu
