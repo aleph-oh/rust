@@ -805,8 +805,8 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr<'v>) 
         ExprKind::Yield(ref subexpression, _) => {
             visitor.visit_expr(subexpression);
         }
-        ExprKind::CilkSpawn(expr) => {
-            visitor.visit_expr(expr);
+        ExprKind::CilkSpawn(inner) => {
+            visitor.visit_expr(inner.body);
         }
         ExprKind::CilkScope(block) => {
             visitor.visit_block(block);

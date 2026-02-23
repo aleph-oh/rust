@@ -43,6 +43,17 @@ impl UpvarId {
     }
 }
 
+pub struct CilkUpvarId {
+    pub var_path: UpvarPath,
+    pub cilk_spawn_expr_id: hir::HirId,
+}
+
+impl CilkUpvarId {
+    pub fn new(var_hir_id: hir::HirId, cilk_spawn_hir_id: hir::HirId) -> CilkUpvarId {
+        CilkUpvarId { var_path: UpvarPath { hir_id: var_hir_id }, cilk_spawn_expr_id: cilk_spawn_hir_id }
+    }
+}
+
 /// Information describing the capture of an upvar. This is computed
 /// during `typeck`, specifically by `regionck`.
 #[derive(PartialEq, Clone, Debug, Copy, TyEncodable, TyDecodable, HashStable)]

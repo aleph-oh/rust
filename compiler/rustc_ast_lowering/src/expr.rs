@@ -292,9 +292,14 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 ExprKind::CilkSpawn(body) => {
                     // FIXME(jhilton): hopefully this makes it easy to, at some point, support parsing arbitrary expressions after a cilk_spawn.
                     //  In the mean time, we're doing a little extra work to make the temporary expression and pass it along into the next IR.
+                    
                     let block = self.lower_block(body, false);
                     let expr = self.expr_block(block);
-                    hir::ExprKind::CilkSpawn(self.arena.alloc(expr))
+                    let c = self.arena.alloc(hir::CilkSpawn {
+                        def_id: self.local_def_id(e.id),
+                        body: self.arena.alloc(expr),
+                    });
+                    hir::ExprKind::CilkSpawn(c)
                 }
                 ExprKind::CilkScope(body) => {
                     let block = self.lower_block(body, false);
@@ -2249,9 +2254,10 @@ impl<'hir> LoweringContext<'_, 'hir> {
         self.expr(b.span, hir::ExprKind::Block(b, None))
     }
 
-    fn expr_spawn_block(&mut self, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
-        let block = self.arena.alloc(self.expr_block(b));
-        self.expr(b.span, hir::ExprKind::CilkSpawn(block))
+    fn expr_spawn_block(&mut self, e: &Expr, b: &'hir hir::Block<'hir>) -> hir::Expr<'hir> {
+        let c = self.expr_block(b);
+        let block = self.arena.alloc(c);
+        self.expr(b.span, hir::ExprKind::CilkSpawn(self.arena.alloc(hir::CilkSpawn{ def_id: self.local_def_id(e.id), body: block })))
     }
 
     pub(super) fn expr_array_ref(

@@ -804,8 +804,8 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Tup(fields) => ExprKind::Tuple { fields: self.mirror_exprs(fields) },
 
             hir::ExprKind::Yield(v, _) => ExprKind::Yield { value: self.mirror_expr(v) },
-            hir::ExprKind::CilkSpawn(expr) => {
-                ExprKind::CilkSpawn { computation: self.mirror_expr(expr) }
+            hir::ExprKind::CilkSpawn(inner) => {
+                ExprKind::CilkSpawn { computation: self.mirror_expr(inner.body) }
             }
             hir::ExprKind::CilkScope(block) => {
                 ExprKind::CilkScope { block: self.mirror_block(block) }

@@ -136,7 +136,7 @@ pub fn type_known_to_meet_bound_modulo_regions<'tcx>(
 ///
 /// Ping me on zulip if you want to use this method and need help with finding
 /// an appropriate replacement.
-#[instrument(level = "debug", skip(infcx, param_env, pred), ret)]
+// #[instrument(level = "debug", skip(infcx, param_env, pred), ret)]
 fn pred_known_to_hold_modulo_regions<'tcx>(
     infcx: &InferCtxt<'tcx>,
     param_env: ty::ParamEnv<'tcx>,
@@ -144,12 +144,16 @@ fn pred_known_to_hold_modulo_regions<'tcx>(
 ) -> bool {
     let obligation = Obligation::new(infcx.tcx, ObligationCause::dummy(), param_env, pred);
 
+    // println!("pred_known_to_hold_modulo_regions");
     let result = infcx.evaluate_obligation_no_overflow(&obligation);
     debug!(?result);
 
+    // println!("pred_known_to_hold_modulo_regions2");
     if result.must_apply_modulo_regions() {
+        // println!("pred_known_to_hold_modulo_regions3");
         true
     } else if result.may_apply() {
+        // println!("pred_known_to_hold_modulo_regions4");
         // Sometimes obligations are ambiguous because the recursive evaluator
         // is not smart enough, so we fall back to fulfillment when we're not certain
         // that an obligation holds or not. Even still, we must make sure that
@@ -165,12 +169,14 @@ fn pred_known_to_hold_modulo_regions<'tcx>(
                 [] => infcx.shallow_resolve(goal) == goal,
 
                 errors => {
+                    // println!("pred_known_to_hold_modulo_regions5");
                     debug!(?errors);
                     false
                 }
             }
         })
     } else {
+        // println!("pred_known_to_hold_modulo_regions6");
         false
     }
 }
