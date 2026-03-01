@@ -222,6 +222,10 @@ impl<'a> Sugg<'a> {
             | ast::ExprKind::Array(..)
             | ast::ExprKind::While(..)
             | ast::ExprKind::Await(..)
+            // TODO(jhilton): think harder about clippy suggestions for cilk_spawn and cilk_sync. Also add
+            //  tests if that behavior becomes more complicated.
+            | ast::ExprKind::CilkSpawn(..)
+            | ast::ExprKind::CilkSync
             | ast::ExprKind::Err => Sugg::NonParen(snippet_with_context(cx, expr.span, ctxt, default, app).0),
             ast::ExprKind::Range(ref lhs, ref rhs, RangeLimits::HalfOpen) => Sugg::BinOp(
                 AssocOp::DotDot,
