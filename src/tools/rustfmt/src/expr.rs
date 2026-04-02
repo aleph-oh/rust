@@ -242,6 +242,7 @@ pub(crate) fn format_expr(
         ast::ExprKind::Yeet(Some(ref expr)) => {
             rewrite_unary_prefix(context, "do yeet ", &**expr, shape)
         }
+        ast::ExprKind::CilkSync => Some("cilk_sync".to_owned()),
         ast::ExprKind::AddrOf(borrow_kind, mutability, ref expr) => {
             rewrite_expr_addrof(context, borrow_kind, mutability, expr, shape)
         }
@@ -387,6 +388,31 @@ pub(crate) fn format_expr(
                 let budget = shape.width.saturating_sub(6);
                 Some(format!(
                     "{kind} {mover}{}",
+                    rewrite_block(
+                        block,
+                        Some(&expr.attrs),
+                        None,
+                        context,
+                        Shape::legacy(budget, shape.indent)
+                    )?
+                ))
+            }
+        }
+        // TODO(jhilton): add a test for cilk_spawn once we have the rest of parsing working!
+        ast::ExprKind::CilkSpawn(ref block) => {
+            if let rw @ Some(_) = rewrite_single_line_block(
+                context,
+                "cilk_spawn",
+                block,
+                Some(&expr.attrs),
+                None,
+                shape,
+            ) {
+                rw
+            } else {
+                let budget = shape.width.saturating_sub(6);
+                Some(format!(
+                    "cilk_spawn {}",
                     rewrite_block(
                         block,
                         Some(&expr.attrs),
